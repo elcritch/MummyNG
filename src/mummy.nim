@@ -270,6 +270,34 @@ proc removeHeader(headers: var HttpHeaders, key: string) =
     else:
       inc i
 
+proc postResponseStreamUpdate(
+  server: Server,
+  stream: ResponseStream,
+  update: sink StreamUpdate
+): bool {.raises: [].} =
+  ## Adds an event to a response stream queue. Returns true if a worker task
+  ## should be posted for this stream.
+  withLock server.responseStreams.lock:
+    try:
+      server.responseStreams.states[stream].updates.addLast(move update)
+      result = not server.responseStreams.states[stream].claimed
+    except KeyError:
+      discard # Not possible
+
+proc popResponseStreamUpdate(
+  server: Server,
+  stream: ResponseStream,
+  update: var StreamUpdate
+): bool {.raises: [].} =
+  withLock server.responseStreams.lock:
+    try:
+      if server.responseStreams.states[stream].updates.len > 0:
+        update = server.responseStreams.states[stream].updates.popFirst()
+        return true
+      server.responseStreams.states[stream].claimed = false
+    except KeyError:
+      discard # Not possible
+
 proc registerHandle2(
   selector: Selector[DataEntry],
   socket: SocketHandle,
@@ -764,21 +792,8 @@ proc workerProc(server: Server) {.raises: [].} =
         return
 
       while true:
-        var
-          update: StreamUpdate
-          hasUpdate: bool
-
-        withLock server.responseStreams.lock:
-          try:
-            if server.responseStreams.states[task.stream].updates.len > 0:
-              update = server.responseStreams.states[task.stream].updates.popFirst()
-              hasUpdate = true
-            else:
-              server.responseStreams.states[task.stream].claimed = false
-          except KeyError:
-            discard # Not possible
-
-        if not hasUpdate:
+        var update: StreamUpdate
+        if not server.popResponseStreamUpdate(task.stream, update):
           break
 
         if update.event == StreamClosed:
@@ -837,15 +852,7 @@ proc postStreamUpdate(
         stream.server.responseStreams.states.del(stream)
     return
 
-  var needsTask: bool
-  withLock stream.server.responseStreams.lock:
-    try:
-      stream.server.responseStreams.states[stream].updates.addLast(move update)
-      needsTask = not stream.server.responseStreams.states[stream].claimed
-    except KeyError:
-      discard # Not possible
-
-  if needsTask:
+  if stream.server.postResponseStreamUpdate(stream, move update):
     stream.server.postTask(WorkerTask(stream: stream))
 
 proc markStreamOpen(stream: ResponseStream) {.raises: [].} =
