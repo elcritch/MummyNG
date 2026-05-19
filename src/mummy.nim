@@ -9,7 +9,7 @@ import mummy/common, mummy/internal, std/atomics, std/base64,
     std/cpuinfo, std/deques, std/hashes, std/nativesockets, std/os,
     std/parseutils, std/random, std/selectors, std/sets, crunchy,
     std/tables, std/times, webby/httpheaders, webby/queryparams, webby/urls,
-    zippy
+    zippy, std/options
 
 from std/strutils import find, cmpIgnoreCase, toHex, toLowerAscii
 
@@ -96,11 +96,6 @@ type
     event: StreamEvent
   ) {.gcsafe.}
 
-  ActorQueues[Actor, Update] = object
-    lock: Lock
-    claimed: Table[Actor, bool]
-    queues: Table[Actor, Deque[Update]]
-
   ResponseStreamActors = object
     lock: Lock
     states: Table[ResponseStream, ResponseStreamState]
@@ -128,7 +123,9 @@ type
     sendQueue: Deque[OutgoingBuffer]
     sendQueueLock: Lock
     streamActors: ResponseStreamActors
-    websocketActors: ActorQueues[WebSocket, WebSocketUpdate]
+    websocketClaimed: Table[WebSocket, bool]
+    websocketQueues: Table[WebSocket, Deque[WebSocketUpdate]]
+    websocketQueuesLock: Lock
 
   Server* = ptr ServerObj
 
@@ -272,73 +269,6 @@ proc removeHeader(headers: var HttpHeaders, key: string) =
       headers.toBase.delete(i)
     else:
       inc i
-
-proc initActorQueues[Actor, Update](
-  actors: var ActorQueues[Actor, Update]
-) {.raises: [].} =
-  initLock(actors.lock)
-
-proc deinitActorQueues[Actor, Update](
-  actors: var ActorQueues[Actor, Update]
-) {.raises: [].} =
-  deinitLock(actors.lock)
-
-proc registerActor[Actor, Update](
-  actors: var ActorQueues[Actor, Update],
-  actor: Actor
-) {.raises: [].} =
-  withLock actors.lock:
-    actors.queues[actor] = initDeque[Update]()
-    actors.claimed[actor] = false
-
-proc unregisterActor[Actor, Update](
-  actors: var ActorQueues[Actor, Update],
-  actor: Actor
-) {.raises: [].} =
-  withLock actors.lock:
-    actors.queues.del(actor)
-    actors.claimed.del(actor)
-
-proc postActorUpdate[Actor, Update](
-  actors: var ActorQueues[Actor, Update],
-  actor: Actor,
-  update: sink Update
-): bool {.raises: [].} =
-  ## Adds an event to an actor queue. Returns true if a worker task should be
-  ## posted for this actor.
-  withLock actors.lock:
-    if actor notin actors.queues:
-      return false
-
-    try:
-      actors.queues[actor].addLast(move update)
-      result = not actors.claimed[actor]
-    except KeyError:
-      discard # Not possible
-
-proc claimActor[Actor, Update](
-  actors: var ActorQueues[Actor, Update],
-  actor: Actor
-): bool {.raises: [].} =
-  withLock actors.lock:
-    if actors.claimed.getOrDefault(actor, true):
-      return false
-    actors.claimed[actor] = true
-    result = true
-
-proc popActorUpdate[Actor, Update](
-  actors: var ActorQueues[Actor, Update],
-  actor: Actor,
-  update: var Update
-): bool {.raises: [].} =
-  withLock actors.lock:
-    try:
-      if actors.queues[actor].len > 0:
-        update = actors.queues[actor].popFirst()
-        return true
-      actors.claimed[actor] = false
-    except KeyError:
-      discard # Not possible
 
 proc initStreamActors(actors: var ResponseStreamActors) {.raises: [].} =
   initLock(actors.lock)
@@ -833,24 +763,36 @@ proc workerProc(server: Server) {.raises: [].} =
       `=destroy`(task.request[])
       deallocShared(task.request)
     elif task.websocket.server != nil:
-      # If this websocket has been claimed or if it is not present in the
-      # table (which indicates it has been closed), skip this task.
-      if not server.websocketActors.claimActor(task.websocket):
-        return
+      withLock server.websocketQueuesLock:
+        if server.websocketClaimed.getOrDefault(task.websocket, true):
+          # If this websocket has been claimed or if it is not present in
+          # the table (which indicates it has been closed), skip this task
+          return
+        # Claim this websocket
+        server.websocketClaimed[task.websocket] = true
 
       while true: # Process the entire websocket queue
-        var update: WebSocketUpdate
-        if not server.websocketActors.popActorUpdate(task.websocket, update):
-          break
+        var update: Option[WebSocketUpdate]
+        withLock server.websocketQueuesLock:
+          try:
+            if server.websocketQueues[task.websocket].len > 0:
+              update = some(server.websocketQueues[task.websocket].popFirst())
+              if update.get.event == CloseEvent:
+                server.websocketQueues.del(task.websocket)
+                server.websocketClaimed.del(task.websocket)
+            else:
+              server.websocketClaimed[task.websocket] = false
+          except KeyError:
+            discard # Not possible
 
-        if update.event == CloseEvent:
-          server.websocketActors.unregisterActor(task.websocket)
+        if not update.isSome:
+          break
 
         try:
           server.websocketHandler(
             task.websocket,
-            update.event,
-            move update.message
+            update.get.event,
+            move update.get.message
           )
         except Exception as e:
           server.log(
@@ -858,7 +800,7 @@ proc workerProc(server: Server) {.raises: [].} =
             "WebSocket exception: " & e.msg & " " & e.getStackTrace()
           )
 
-        if update.event == CloseEvent:
+        if update.get.event == CloseEvent:
           break
     else: # Response stream
       # If this stream has been claimed or if it is not present in the table
@@ -981,7 +923,20 @@ proc postWebSocketUpdate(
     websocket.server.log(DebugLevel, "WebSocket event but no WebSocket handler")
     return
 
-  if websocket.server.websocketActors.postActorUpdate(websocket, move update):
+  var needsTask: bool
+
+  withLock websocket.server.websocketQueuesLock:
+    if websocket notin websocket.server.websocketQueues:
+      return
+
+    try:
+      websocket.server.websocketQueues[websocket].addLast(move update)
+      if not websocket.server.websocketClaimed[websocket]:
+        needsTask = true
+    except KeyError:
+      discard # Not possible
+
+  if needsTask:
     websocket.server.postTask(WorkerTask(websocket: websocket))
 
 proc sendCloseFrame(
@@ -1548,7 +1503,7 @@ proc destroy(server: Server, joinThreads: bool) {.raises: [].} =
     deinitLock(server.responseQueueLock)
     deinitLock(server.sendQueueLock)
     deinitStreamActors(server.streamActors)
-    deinitActorQueues(server.websocketActors)
+    deinitLock(server.websocketQueuesLock)
     try:
       server.responseQueued.close()
     except Exception as e:
@@ -1632,7 +1587,9 @@ proc loopForever(server: Server) {.raises: [OSError, IOSelectorsException].} =
                 clientSocket: encodedResponse.clientSocket,
                 clientId: encodedResponse.clientId
               )
-              server.websocketActors.registerActor(websocket)
+              withLock server.websocketQueuesLock:
+                server.websocketQueues[websocket] = initDeque[WebSocketUpdate]()
+                server.websocketClaimed[websocket] = false
               websocket.postWebSocketUpdate(WebSocketUpdate(event: OpenEvent))
               # Are there any sends that were waiting for this response?
               if clientDataEntry.sendsWaitingForUpgrade.len > 0:
@@ -1976,7 +1933,7 @@ proc newServer*(
     initLock(result.responseQueueLock)
     initLock(result.sendQueueLock)
     initStreamActors(result.streamActors)
-    initActorQueues(result.websocketActors)
+    initLock(result.websocketQueuesLock)
 
     for i in 0 ..< workerThreads:
       createThread(result.workerThreads[i], workerProc, result)
