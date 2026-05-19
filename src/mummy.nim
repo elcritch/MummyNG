@@ -96,7 +96,7 @@ type
     event: StreamEvent
   ) {.gcsafe.}
 
-  ResponseStreamActors = object
+  ResponseStreamStore = object
     lock: Lock
     states: Table[ResponseStream, ResponseStreamState]
 
@@ -122,7 +122,7 @@ type
     responseQueueLock: Lock
     sendQueue: Deque[OutgoingBuffer]
     sendQueueLock: Lock
-    streamActors: ResponseStreamActors
+    responseStreams: ResponseStreamStore
     websocketClaimed: Table[WebSocket, bool]
     websocketQueues: Table[WebSocket, Deque[WebSocketUpdate]]
     websocketQueuesLock: Lock
@@ -269,60 +269,6 @@ proc removeHeader(headers: var HttpHeaders, key: string) =
       headers.toBase.delete(i)
     else:
       inc i
-
-proc initStreamActors(actors: var ResponseStreamActors) {.raises: [].} =
-  initLock(actors.lock)
-
-proc deinitStreamActors(actors: var ResponseStreamActors) {.raises: [].} =
-  deinitLock(actors.lock)
-
-proc unregisterStreamActor(
-  actors: var ResponseStreamActors,
-  stream: ResponseStream
-) {.raises: [].} =
-  withLock actors.lock:
-    actors.states.del(stream)
-
-proc postStreamActorUpdate(
-  actors: var ResponseStreamActors,
-  stream: ResponseStream,
-  update: sink StreamUpdate
-): bool {.raises: [].} =
-  ## Adds an event to a stream actor queue. Returns true if a worker task should
-  ## be posted for this stream.
-  withLock actors.lock:
-    try:
-      actors.states[stream].updates.addLast(move update)
-      result = not actors.states[stream].claimed
-    except KeyError:
-      discard # Not possible
-
-proc claimStreamActor(
-  actors: var ResponseStreamActors,
-  stream: ResponseStream
-): bool {.raises: [].} =
-  withLock actors.lock:
-    try:
-      if actors.states[stream].claimed:
-        return false
-      actors.states[stream].claimed = true
-      result = true
-    except KeyError:
-      discard
-
-proc popStreamActorUpdate(
-  actors: var ResponseStreamActors,
-  stream: ResponseStream,
-  update: var StreamUpdate
-): bool {.raises: [].} =
-  withLock actors.lock:
-    try:
-      if actors.states[stream].updates.len > 0:
-        update = actors.states[stream].updates.popFirst()
-        return true
-      actors.states[stream].claimed = false
-    except KeyError:
-      discard # Not possible
 
 proc registerHandle2(
   selector: Selector[DataEntry],
@@ -524,9 +470,9 @@ proc start*(stream: ResponseStream) {.raises: [], gcsafe.} =
   ## Starts a response stream created with `respondStream(..., start = false)`.
   var encodedResponse: OutgoingBuffer
 
-  withLock stream.server.streamActors.lock:
+  withLock stream.server.responseStreams.lock:
     try:
-      var state = addr stream.server.streamActors.states[stream]
+      var state = addr stream.server.responseStreams.states[stream]
       if state.started:
         return
       state.started = true
@@ -600,8 +546,8 @@ proc respondStream*(
   if statusCode < 100 or statusCode >= 200:
     request.responded = true
 
-  withLock request.server.streamActors.lock:
-    request.server.streamActors.states[result] = ResponseStreamState(
+  withLock request.server.responseStreams.lock:
+    request.server.responseStreams.states[result] = ResponseStreamState(
       updates: initDeque[StreamUpdate](),
       response: encodedResponse,
       chunked: chunked,
@@ -627,9 +573,9 @@ proc write*(
     chunked: bool
     encodedChunk = OutgoingBuffer()
 
-  withLock stream.server.streamActors.lock:
+  withLock stream.server.responseStreams.lock:
     try:
-      var state = addr stream.server.streamActors.states[stream]
+      var state = addr stream.server.responseStreams.states[stream]
       if not state.started or not state.writable or
         state.closeQueued or state.closed:
         return false
@@ -666,9 +612,9 @@ proc close*(stream: ResponseStream) {.raises: [], gcsafe.} =
     chunked, closeConnection: bool
     encodedClose = OutgoingBuffer()
 
-  withLock stream.server.streamActors.lock:
+  withLock stream.server.responseStreams.lock:
     try:
-      var state = addr stream.server.streamActors.states[stream]
+      var state = addr stream.server.responseStreams.states[stream]
       if state.closeQueued or state.closed:
         return
       state.closeQueued = true
@@ -805,16 +751,39 @@ proc workerProc(server: Server) {.raises: [].} =
     else: # Response stream
       # If this stream has been claimed or if it is not present in the table
       # (which indicates it has been closed), skip this task.
-      if not server.streamActors.claimStreamActor(task.stream):
+      var streamClaimed: bool
+      withLock server.responseStreams.lock:
+        try:
+          if server.responseStreams.states[task.stream].claimed:
+            return
+          server.responseStreams.states[task.stream].claimed = true
+          streamClaimed = true
+        except KeyError:
+          discard
+      if not streamClaimed:
         return
 
       while true:
-        var update: StreamUpdate
-        if not server.streamActors.popStreamActorUpdate(task.stream, update):
+        var
+          update: StreamUpdate
+          hasUpdate: bool
+
+        withLock server.responseStreams.lock:
+          try:
+            if server.responseStreams.states[task.stream].updates.len > 0:
+              update = server.responseStreams.states[task.stream].updates.popFirst()
+              hasUpdate = true
+            else:
+              server.responseStreams.states[task.stream].claimed = false
+          except KeyError:
+            discard # Not possible
+
+        if not hasUpdate:
           break
 
         if update.event == StreamClosed:
-          server.streamActors.unregisterStreamActor(task.stream)
+          withLock server.responseStreams.lock:
+            server.responseStreams.states.del(task.stream)
 
         try:
           if server.streamHandler != nil:
@@ -864,17 +833,26 @@ proc postStreamUpdate(
   if stream.server.streamHandler == nil:
     stream.server.log(DebugLevel, "ResponseStream event but no stream handler")
     if update.event == StreamClosed:
-      stream.server.streamActors.unregisterStreamActor(stream)
+      withLock stream.server.responseStreams.lock:
+        stream.server.responseStreams.states.del(stream)
     return
 
-  if stream.server.streamActors.postStreamActorUpdate(stream, move update):
+  var needsTask: bool
+  withLock stream.server.responseStreams.lock:
+    try:
+      stream.server.responseStreams.states[stream].updates.addLast(move update)
+      needsTask = not stream.server.responseStreams.states[stream].claimed
+    except KeyError:
+      discard # Not possible
+
+  if needsTask:
     stream.server.postTask(WorkerTask(stream: stream))
 
 proc markStreamOpen(stream: ResponseStream) {.raises: [].} =
   var shouldPost: bool
-  withLock stream.server.streamActors.lock:
+  withLock stream.server.responseStreams.lock:
     try:
-      var state = addr stream.server.streamActors.states[stream]
+      var state = addr stream.server.responseStreams.states[stream]
       if not state.closed:
         state.writable = true
         shouldPost = true
@@ -886,9 +864,9 @@ proc markStreamOpen(stream: ResponseStream) {.raises: [].} =
 
 proc markStreamWritable(stream: ResponseStream) {.raises: [].} =
   var shouldPost: bool
-  withLock stream.server.streamActors.lock:
+  withLock stream.server.responseStreams.lock:
     try:
-      var state = addr stream.server.streamActors.states[stream]
+      var state = addr stream.server.responseStreams.states[stream]
       if not state.closeQueued and not state.closed:
         state.writable = true
         shouldPost = true
@@ -900,9 +878,9 @@ proc markStreamWritable(stream: ResponseStream) {.raises: [].} =
 
 proc finishStream(stream: ResponseStream, error: bool) {.raises: [].} =
   var shouldPost: bool
-  withLock stream.server.streamActors.lock:
+  withLock stream.server.responseStreams.lock:
     try:
-      var state = addr stream.server.streamActors.states[stream]
+      var state = addr stream.server.responseStreams.states[stream]
       if not state.closed:
         state.closed = true
         state.writable = false
@@ -1502,7 +1480,7 @@ proc destroy(server: Server, joinThreads: bool) {.raises: [].} =
     deinitCond(server.taskQueueCond)
     deinitLock(server.responseQueueLock)
     deinitLock(server.sendQueueLock)
-    deinitStreamActors(server.streamActors)
+    deinitLock(server.responseStreams.lock)
     deinitLock(server.websocketQueuesLock)
     try:
       server.responseQueued.close()
@@ -1932,7 +1910,7 @@ proc newServer*(
     initCond(result.taskQueueCond)
     initLock(result.responseQueueLock)
     initLock(result.sendQueueLock)
-    initStreamActors(result.streamActors)
+    initLock(result.responseStreams.lock)
     initLock(result.websocketQueuesLock)
 
     for i in 0 ..< workerThreads:
