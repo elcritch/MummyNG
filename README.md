@@ -1,8 +1,16 @@
-# Mummy
+# MummyNG
+
+Fork of original Mummy with goal of maintaining it while adding missing features. Used in production.
+
+## Details 
+
+`atlas use mummy`
+
+or
 
 `nimble install mummy`
 
-![Github Actions](https://github.com/guzba/mummy/workflows/Github%20Actions/badge.svg)
+![Github Actions](https://github.com/elcritch/mummy/workflows/Github%20Actions/badge.svg)
 
 [API reference](https://guzba.github.io/mummy/mummy.html)
 
