@@ -1606,6 +1606,8 @@ proc newServer*(
   # Stuff that can fail
   try:
     when not defined(mummyNoWorkers):
+      # Parser fuzzing does not run the selector loop; avoid allocating
+      # thousands of unused Windows loopback socket pairs for SelectEvents.
       result.responseQueued = newSelectEvent()
       result.responseQueuedInitialized = true
       result.sendQueued = newSelectEvent()
