@@ -13,7 +13,6 @@ import webby/[httpheaders, queryparams, urls]
 import crunchy, zippy
 
 import ./mummy/common, ./mummy/internal
-    zippy, std/options
 
 from std/strutils import find, cmpIgnoreCase, toLowerAscii
 
