@@ -80,7 +80,7 @@ block:
     echo "Headers"
 
     for i in 0 ..< iterations:
-      let dataEntry = DataEntry(kind: ClientSocketEntry)
+      let dataEntry = SelectorEntry(kind: ClientEntry)
 
       # Add request line
       var
@@ -117,11 +117,7 @@ block:
 
       let
         server = newServer(handler)
-        clientSocket = 1.SocketHandle
-        closingConnection = server.afterRecvHttp(
-          clientSocket,
-          dataEntry
-        )
+        closingConnection = server.afterRecvHttp(dataEntry)
       if not closingConnection:
         let request = server.taskQueue.popFirst().request
         doAssert request.httpMethod == httpMethod
@@ -135,7 +131,7 @@ block:
     echo "Transfer-Encoding: chunked"
 
     for i in 0 ..< iterations:
-      let dataEntry = DataEntry(kind: ClientSocketEntry)
+      let dataEntry = SelectorEntry(kind: ClientEntry)
 
       dataEntry.recvBuf.add("GET / HTTP/1.1\r\n")
       dataEntry.recvBuf.add("Transfer-Encoding: chunked\r\n")
@@ -167,11 +163,7 @@ block:
 
       let
         server = newServer(handler)
-        clientSocket = 1.SocketHandle
-        closingConnection = server.afterRecvHttp(
-          clientSocket,
-          dataEntry
-        )
+        closingConnection = server.afterRecvHttp(dataEntry)
       doAssert not closingConnection
       let request = server.taskQueue.popFirst().request
       doAssert request.headers.headerContainsToken(
@@ -184,7 +176,7 @@ block:
     echo "Content-Length"
 
     for i in 0 ..< iterations:
-      let dataEntry = DataEntry(kind: ClientSocketEntry)
+      let dataEntry = SelectorEntry(kind: ClientEntry)
 
       var body: string
       for i in 0 ..< rand(1 ..< 1000):
@@ -204,11 +196,7 @@ block:
         # Not truncated
         let
           server = newServer(handler)
-          clientSocket = 1.SocketHandle
-          closingConnection = server.afterRecvHttp(
-            clientSocket,
-            dataEntry
-          )
+          closingConnection = server.afterRecvHttp(dataEntry)
         if not closingConnection:
           let request = server.taskQueue.popFirst().request
           doAssert request.headers.headerContainsToken(
@@ -224,13 +212,8 @@ block:
 
         dataEntry.bytesReceived = dataEntry.recvBuf.len
 
-        let
-          server = newServer(handler)
-          clientSocket = 1.SocketHandle
-        discard server.afterRecvHttp(
-          clientSocket,
-          dataEntry
-        )
+        let server = newServer(handler)
+        discard server.afterRecvHttp(dataEntry)
         server.close()
 
 block:
@@ -253,7 +236,7 @@ block:
     frameHeader[1] = (frameHeader[1].uint8 or 0b10000000).char # Set masking bit
 
     for i in 0 ..< 1000:
-      let dataEntry = DataEntry(kind: ClientSocketEntry)
+      let dataEntry = SelectorEntry(kind: ClientEntry)
 
       let
         v0 = rand(0 ..< frameHeader.len)
@@ -271,33 +254,34 @@ block:
 
       let
         server = newServer(handler, websocketHandler)
-        clientSocket = 1.SocketHandle
-        websocket = WebSocket(server: server, clientSocket: clientSocket)
+        websocket = WebSocket(
+          server: server,
+          connectionId: dataEntry.connectionId
+        )
 
       server.websocketQueues[websocket] = initDeque[WebSocketUpdate]()
       server.websocketClaimed[websocket] = false
 
-      let closingConnection = server.afterRecvWebSocket(
-          clientSocket,
-          dataEntry
-        )
+      let closingConnection = server.afterRecvWebSocket(dataEntry)
       if not closingConnection:
         if server.taskQueue.len > 0:
           let websocket = server.taskQueue.popFirst().websocket
           doAssert websocket.server == server
-          doAssert websocket.clientSocket == clientSocket
+          doAssert websocket.connectionId == dataEntry.connectionId
       server.close()
 
   block:
     echo "Continuations"
 
     for i in 0 ..< iterations:
-      let dataEntry = DataEntry(kind: ClientSocketEntry)
+      let dataEntry = SelectorEntry(kind: ClientEntry)
 
       let
         server = newServer(handler, websocketHandler)
-        clientSocket = 1.SocketHandle
-        websocket = WebSocket(server: server, clientSocket: clientSocket)
+        websocket = WebSocket(
+          server: server,
+          connectionId: dataEntry.connectionId
+        )
 
       server.websocketQueues[websocket] = initDeque[WebSocketUpdate]()
       server.websocketClaimed[websocket] = false
@@ -342,10 +326,7 @@ block:
 
         dataEntry.bytesReceived = dataEntry.recvBuf.len
 
-        let closingConnection = server.afterRecvWebSocket(
-            clientSocket,
-            dataEntry
-          )
+        let closingConnection = server.afterRecvWebSocket(dataEntry)
         if closingConnection:
           doAssert false
 

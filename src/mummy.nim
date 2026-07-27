@@ -7,7 +7,7 @@ when not compileOption("threads"):
 
 import mummy/common, mummy/internal, std/atomics, std/base64,
     std/cpuinfo, std/deques, std/hashes, std/nativesockets, std/os,
-    std/monotimes, std/parseutils, std/random, std/selectors, std/sets, crunchy,
+    std/monotimes, std/net, std/parseutils, std/selectors, std/sets, crunchy,
     std/tables, std/times, webby/httpheaders, webby/queryparams, webby/urls,
     zippy, std/options
 
@@ -24,10 +24,9 @@ when defined(linux):
     {.importc: "SOCK_NONBLOCK", header: "<sys/socket.h>".}: cint
 
 when defined(windows):
-  from std/winlean import TCP_NODELAY
   const ipv6OnlyOption = 27 # IPV6_V6ONLY from Winsock2.
 elif defined(posix):
-  from std/posix import ECONNABORTED, IPV6_V6ONLY, TCP_NODELAY
+  from std/posix import ECONNABORTED, IPV6_V6ONLY
 
 import std/locks
 
@@ -44,6 +43,8 @@ let
   http11 = "HTTP/1.1"
 
 type
+  ConnectionId = uint64
+
   RequestObj* = object
     httpVersion*: HttpVersion ## HTTP version from the request line.
     httpMethod*: string ## HTTP method from the request line.
@@ -55,16 +56,14 @@ type
     body*: string ## Request body.
     remoteAddress*: string ## Network address of the request sender.
     server: Server
-    clientSocket: SocketHandle
-    clientId: uint64
+    connectionId: ConnectionId
     responded: bool
 
   Request* = ptr RequestObj
 
   WebSocket* = object
     server: Server
-    clientSocket: SocketHandle
-    clientId: uint64
+    connectionId: ConnectionId
 
   Message* = object
     kind*: MessageKind
@@ -90,14 +89,14 @@ type
     logHandler: LogHandler
     maxHeadersLen, maxBodyLen, maxMessageLen: int
     tcpNoDelay: bool
-    rand: Rand
     workerThreads: seq[Thread[Server]]
     serving: Atomic[bool]
     destroyCalled: bool
-    listeningSockets: seq[SocketHandle]
-    selector: Selector[DataEntry]
+    listeningSockets: seq[Socket]
+    selector: Selector[SelectorEntry]
     responseQueued, sendQueued, shutdown: SelectEvent
-    clientSockets: HashSet[SocketHandle]
+    connections: Table[ConnectionId, SelectorEntry] # Selector thread only.
+    lastConnectionId: ConnectionId
     taskQueueLock: Lock
     taskQueueCond: Cond
     taskQueue: Deque[WorkerTask]
@@ -115,17 +114,18 @@ type
     request: Request
     websocket: WebSocket
 
-  DataEntryKind = enum
-    ServerSocketEntry, ClientSocketEntry, EventEntry
+  SelectorEntryKind = enum
+    ListenerEntry, ClientEntry, EventEntry
 
-  DataEntry {.acyclic.} = ref object
-    case kind: DataEntryKind:
-    of ServerSocketEntry:
+  SelectorEntry {.acyclic.} = ref object
+    socket: Socket
+    case kind: SelectorEntryKind:
+    of ListenerEntry:
       discard
     of EventEntry:
       event: SelectEvent
-    of ClientSocketEntry:
-      clientId: uint64
+    of ClientEntry:
+      connectionId: ConnectionId
       remoteAddress: string
       recvBuf: string
       bytesReceived: int
@@ -156,8 +156,7 @@ type
     frameLen: int
 
   OutgoingBuffer {.acyclic.} = ref object
-    clientSocket: SocketHandle
-    clientId: uint64
+    connectionId: ConnectionId
     closeConnection, isWebSocketUpgrade, isCloseFrame: bool
     buffer1, buffer2: string
     bytesSent: int
@@ -215,10 +214,10 @@ proc headerContainsToken(headers: var HttpHeaders, key, token: string): bool =
         first = comma + 1
 
 proc registerHandle2(
-  selector: Selector[DataEntry],
+  selector: Selector[SelectorEntry],
   socket: SocketHandle,
   events: set[Event],
-  data: DataEntry
+  data: SelectorEntry
 ) {.raises: [IOSelectorsException].} =
   try:
     selector.registerHandle(socket, events, data)
@@ -226,7 +225,7 @@ proc registerHandle2(
     raise newException(IOSelectorsException, getCurrentExceptionMsg())
 
 proc updateHandle2(
-  selector: Selector[DataEntry],
+  selector: Selector[SelectorEntry],
   socket: SocketHandle,
   events: set[Event]
 ) {.raises: [IOSelectorsException].} =
@@ -250,15 +249,25 @@ proc trigger(
 
 proc setNoDelay(
   server: Server,
-  socket: SocketHandle
+  socket: Socket
 ) {.raises: [].} =
   try:
-    socket.setSockOptInt(Protocol.IPPROTO_TCP.int, TCP_NODELAY.int, 1)
+    socket.setSockOpt(
+      OptNoDelay,
+      true,
+      level = Protocol.IPPROTO_TCP.cint
+    )
   except Exception as e:
     server.log(
       ErrorLevel,
       "Error setting TCP_NODELAY: ", e.msg
     )
+
+proc allocateConnectionId(server: Server): ConnectionId =
+  while true:
+    inc server.lastConnectionId
+    if server.lastConnectionId notin server.connections:
+      return server.lastConnectionId
 
 proc send*(
   websocket: WebSocket,
@@ -268,8 +277,7 @@ proc send*(
   ## Enqueues the message to be sent over the WebSocket connection.
 
   var encodedFrame = OutgoingBuffer()
-  encodedFrame.clientSocket = websocket.clientSocket
-  encodedFrame.clientId = websocket.clientId
+  encodedFrame.connectionId = websocket.connectionId
 
   case kind:
   of TextMessage:
@@ -298,8 +306,7 @@ proc close*(websocket: WebSocket) {.raises: [], gcsafe.} =
   ## The handshake will only begin after the queued messages are sent.
 
   var encodedFrame = OutgoingBuffer()
-  encodedFrame.clientSocket = websocket.clientSocket
-  encodedFrame.clientId = websocket.clientId
+  encodedFrame.connectionId = websocket.connectionId
   encodedFrame.buffer1 = encodeFrameHeader(0x8, 0)
   encodedFrame.isCloseFrame = true
 
@@ -327,8 +334,7 @@ proc respond*(
     )
 
   var encodedResponse = OutgoingBuffer()
-  encodedResponse.clientSocket = request.clientSocket
-  encodedResponse.clientId = request.clientId
+  encodedResponse.connectionId = request.connectionId
   encodedResponse.closeConnection =
     request.httpVersion == Http10 # Default behavior
 
@@ -449,8 +455,7 @@ proc upgradeToWebSocket*(
 
   result = WebSocket(
     server: request.server,
-    clientSocket: request.clientSocket,
-    clientId: request.clientId
+    connectionId: request.connectionId
   )
 
   let hash = sha1(websocketKey & "258EAFA5-E914-47DA-95CA-C5AB0DC85B11")
@@ -575,24 +580,21 @@ proc postWebSocketUpdate(
 
 proc sendCloseFrame(
   server: Server,
-  clientSocket: SocketHandle,
-  dataEntry: DataEntry,
+  dataEntry: SelectorEntry,
   closeConnection: bool
 ) {.raises: [IOSelectorsException].} =
   let outgoingBuffer = OutgoingBuffer()
-  outgoingBuffer.clientSocket = clientSocket
-  outgoingBuffer.clientId = dataEntry.clientId
+  outgoingBuffer.connectionId = dataEntry.connectionId
   outgoingBuffer.buffer1 = encodeFrameHeader(0x8, 0)
   outgoingBuffer.isCloseFrame = true
   outgoingBuffer.closeConnection = closeConnection
   dataEntry.outgoingBuffers.addLast(outgoingBuffer)
   dataEntry.closeFrameQueuedAt = epochTime()
-  server.selector.updateHandle2(clientSocket, {Read, Write})
+  server.selector.updateHandle2(dataEntry.socket.getFd(), {Read, Write})
 
 proc afterRecvWebSocket(
   server: Server,
-  clientSocket: SocketHandle,
-  dataEntry: DataEntry
+  dataEntry: SelectorEntry
 ): bool {.raises: [IOSelectorsException].} =
   if dataEntry.closeFrameQueuedAt > 0 and
     epochTime() - dataEntry.closeFrameQueuedAt > 10:
@@ -730,7 +732,7 @@ proc afterRecvWebSocket(
         if dataEntry.closeFrameQueuedAt > 0:
           return true # Close the connection
         # Otherwise send a Close in response then close the connection
-        server.sendCloseFrame(clientSocket, dataEntry, true)
+        server.sendCloseFrame(dataEntry, true)
         continue
       of 0x9: # Ping
         message.kind = Ping
@@ -743,8 +745,7 @@ proc afterRecvWebSocket(
       let
         websocket = WebSocket(
           server: server,
-          clientSocket: clientSocket,
-          clientId: dataEntry.clientId
+          connectionId: dataEntry.connectionId
         )
         update = WebSocketUpdate(
           event: MessageEvent,
@@ -754,14 +755,12 @@ proc afterRecvWebSocket(
 
 proc popRequest(
   server: Server,
-  clientSocket: SocketHandle,
-  dataEntry: DataEntry
+  dataEntry: SelectorEntry
 ): Request {.raises: [].} =
   ## Pops the completed HttpRequest from the socket and resets the parse state.
   result = cast[Request](allocShared0(sizeof(RequestObj)))
   result.server = server
-  result.clientSocket = clientSocket
-  result.clientId = dataEntry.clientId
+  result.connectionId = dataEntry.connectionId
   result.remoteAddress = dataEntry.remoteAddress
   result.httpVersion = dataEntry.requestState.httpVersion
   result.httpMethod = move dataEntry.requestState.httpMethod
@@ -778,8 +777,7 @@ proc popRequest(
 
 proc afterRecvHttp(
   server: Server,
-  clientSocket: SocketHandle,
-  dataEntry: DataEntry
+  dataEntry: SelectorEntry
 ): bool {.raises: [].} =
   # We do not expect pipelined requests so log if any new data is received
   # while a request is outstanding
@@ -1036,7 +1034,7 @@ proc afterRecvHttp(
       dataEntry.bytesReceived = bytesRemaining
 
       if chunkLen == 0: # A chunk of len 0 marks the end of the request body
-        let request = server.popRequest(clientSocket, dataEntry)
+        let request = server.popRequest(dataEntry)
         server.postTask(WorkerTask(request: request))
   else:
     if dataEntry.requestState.contentLength > server.maxBodyLen:
@@ -1074,25 +1072,23 @@ proc afterRecvHttp(
         )
         dataEntry.bytesReceived = bytesRemaining
 
-    let request = server.popRequest(clientSocket, dataEntry)
+    let request = server.popRequest(dataEntry)
     server.postTask(WorkerTask(request: request))
 
 proc afterRecv(
   server: Server,
-  clientSocket: SocketHandle,
-  dataEntry: DataEntry
+  dataEntry: SelectorEntry
 ): bool {.raises: [IOSelectorsException].} =
   # Have we upgraded this connection to a websocket?
   # If not, treat incoming bytes as part of HTTP requests.
   if dataEntry.upgradedToWebSocket:
-    server.afterRecvWebSocket(clientSocket, dataEntry)
+    server.afterRecvWebSocket(dataEntry)
   else:
-    server.afterRecvHttp(clientSocket, dataEntry)
+    server.afterRecvHttp(dataEntry)
 
 proc afterSend(
   server: Server,
-  clientSocket: SocketHandle,
-  dataEntry: DataEntry
+  dataEntry: SelectorEntry
 ): bool {.raises: [IOSelectorsException].} =
   let
     outgoingBuffer = dataEntry.outgoingBuffers.peekFirst()
@@ -1107,47 +1103,62 @@ proc afterSend(
       return true
   # If we don't have any more outgoing buffers, update the selector
   if dataEntry.outgoingBuffers.len == 0:
-    server.selector.updateHandle2(clientSocket, {Read})
+    server.selector.updateHandle2(dataEntry.socket.getFd(), {Read})
 
 proc acceptClient(
-  listeningSocket: SocketHandle
-): (SocketHandle, string) {.raises: [OSError].} =
+  listeningSocket: Socket
+): (Socket, string) {.raises: [OSError].} =
+  # std/net.acceptAddr uses an IPv4-sized address buffer in supported Nim
+  # versions. Keep this raw accept so IPv6 peers are handled correctly.
   var
     peerAddress: Sockaddr_storage
     peerAddressLen = sizeof(peerAddress).SockLen
 
-  let clientSocket =
+  let clientFd =
     when defined(linux) and not defined(nimdoc):
       accept4(
-        listeningSocket,
+        listeningSocket.getFd(),
         cast[ptr SockAddr](addr peerAddress),
         addr peerAddressLen,
         SOCK_CLOEXEC or SOCK_NONBLOCK
       )
     else:
       nativesockets.accept(
-        listeningSocket,
+        listeningSocket.getFd(),
         cast[ptr SockAddr](addr peerAddress),
         addr peerAddressLen
       )
 
-  if clientSocket == osInvalidSocket:
-    return (clientSocket, "")
+  if clientFd == osInvalidSocket:
+    return (nil, "")
 
   when not defined(linux):
     when declared(setInheritable):
-      if not clientSocket.setInheritable(false):
+      if not clientFd.setInheritable(false):
         let error = osLastError()
-        clientSocket.close()
+        clientFd.close()
         raiseOSError(error)
 
-  let remoteAddress =
-    try:
-      getAddrString(cast[ptr SockAddr](addr peerAddress))
-    except Exception:
-      ""
-
-  (clientSocket, remoteAddress)
+  try:
+    let clientDomain =
+      if peerAddress.ss_family.cint == nativesockets.toInt(Domain.AF_INET6):
+        Domain.AF_INET6
+      else:
+        Domain.AF_INET
+    let clientSocket = newSocket(
+      clientFd,
+      clientDomain,
+      buffered = false
+    )
+    let remoteAddress =
+      try:
+        clientSocket.getPeerAddr()[0]
+      except Exception:
+        ""
+    (clientSocket, remoteAddress)
+  except OSError as e:
+    clientFd.close()
+    raise e
 
 proc isTransientAcceptError(error: OSErrorCode): bool =
   when defined(windows):
@@ -1165,8 +1176,8 @@ proc destroy(server: Server, joinThreads: bool) {.raises: [].} =
       discard # Ignore
   for listeningSocket in server.listeningSockets:
     listeningSocket.close()
-  for clientSocket in server.clientSockets:
-    clientSocket.close()
+  for connection in server.connections.values:
+    connection.socket.close()
   broadcast(server.taskQueueCond)
   if joinThreads:
     joinThreads(server.workerThreads)
@@ -1194,19 +1205,155 @@ proc destroy(server: Server, joinThreads: bool) {.raises: [].} =
     # The process is likely going to be exiting anyway
     discard
 
+proc drainResponseQueue(
+  server: Server,
+  responses: var seq[OutgoingBuffer]
+) {.raises: [IOSelectorsException].} =
+  responses.setLen(0)
+  withLock server.responseQueueLock:
+    while server.responseQueue.len > 0:
+      responses.add(server.responseQueue.popFirst())
+
+  for response in responses:
+    let client = server.connections.getOrDefault(response.connectionId)
+    if client == nil:
+      server.log(DebugLevel, "Dropped response to disconnected client")
+    else:
+      client.outgoingBuffers.addLast(response)
+      server.selector.updateHandle2(client.socket.getFd(), {Read, Write})
+      client.requestCounter = max(client.requestCounter - 1, 0)
+
+      if response.isWebSocketUpgrade:
+        client.upgradedToWebSocket = true
+        let websocket = WebSocket(
+          server: server,
+          connectionId: response.connectionId
+        )
+        withLock server.websocketQueuesLock:
+          server.websocketQueues[websocket] = initDeque[WebSocketUpdate]()
+          server.websocketClaimed[websocket] = false
+        websocket.postWebSocketUpdate(WebSocketUpdate(event: OpenEvent))
+
+        for frame in client.sendsWaitingForUpgrade:
+          if client.closeFrameQueuedAt > 0:
+            server.log(DebugLevel, "Dropped message after WebSocket close")
+          else:
+            client.outgoingBuffers.addLast(frame)
+            if frame.isCloseFrame:
+              client.closeFrameQueuedAt = epochTime()
+        client.sendsWaitingForUpgrade.setLen(0)
+
+proc drainSendQueue(
+  server: Server,
+  frames: var seq[OutgoingBuffer]
+) {.raises: [IOSelectorsException].} =
+  frames.setLen(0)
+  withLock server.sendQueueLock:
+    while server.sendQueue.len > 0:
+      frames.add(server.sendQueue.popFirst())
+
+  for frame in frames:
+    let client = server.connections.getOrDefault(frame.connectionId)
+    if client == nil:
+      server.log(DebugLevel, "Dropped message to disconnected client")
+    elif client.upgradedToWebSocket:
+      if client.closeFrameQueuedAt > 0:
+        server.log(DebugLevel, "Dropped message after WebSocket close")
+      else:
+        client.outgoingBuffers.addLast(frame)
+        if frame.isCloseFrame:
+          client.closeFrameQueuedAt = epochTime()
+        server.selector.updateHandle2(client.socket.getFd(), {Read, Write})
+    else:
+      client.sendsWaitingForUpgrade.add(frame)
+
+proc acceptConnection(
+  server: Server,
+  listener: SelectorEntry
+) {.raises: [OSError, IOSelectorsException].} =
+  let (clientSocket, remoteAddress) = acceptClient(listener.socket)
+  if clientSocket.isNil:
+    let error = osLastError()
+    if not isTransientAcceptError(error):
+      raiseOSError(error)
+  else:
+    when not defined(linux):
+      try:
+        clientSocket.getFd().setBlocking(false)
+      except OSError as e:
+        clientSocket.close()
+        raise e
+
+    if server.tcpNoDelay:
+      server.setNoDelay(clientSocket)
+
+    let client = SelectorEntry(kind: ClientEntry, socket: clientSocket)
+    client.connectionId = server.allocateConnectionId()
+    client.remoteAddress = remoteAddress
+    client.recvBuf.setLen(initialRecvBufLen)
+    server.connections[client.connectionId] = client
+    server.selector.registerHandle2(clientSocket.getFd(), {Read}, client)
+
+proc receiveFromClient(client: SelectorEntry): bool =
+  if client.bytesReceived == client.recvBuf.len:
+    client.recvBuf.setLen(client.recvBuf.len * 2)
+
+  let bytesReceived = client.socket.recv(
+    client.recvBuf[client.bytesReceived].addr,
+    client.recvBuf.len - client.bytesReceived
+  )
+  if bytesReceived > 0:
+    client.bytesReceived += bytesReceived
+    result = true
+
+proc sendToClient(client: SelectorEntry): bool =
+  let outgoingBuffer = client.outgoingBuffers.peekFirst()
+  let bytesSent =
+    if outgoingBuffer.bytesSent < outgoingBuffer.buffer1.len:
+      client.socket.send(
+        outgoingBuffer.buffer1[outgoingBuffer.bytesSent].addr,
+        outgoingBuffer.buffer1.len - outgoingBuffer.bytesSent
+      )
+    else:
+      let buffer2Pos = outgoingBuffer.bytesSent - outgoingBuffer.buffer1.len
+      client.socket.send(
+        outgoingBuffer.buffer2[buffer2Pos].addr,
+        outgoingBuffer.buffer2.len - buffer2Pos
+      )
+  if bytesSent > 0:
+    outgoingBuffer.bytesSent += bytesSent
+    result = true
+
+proc closeConnection(server: Server, client: SelectorEntry) {.raises: [].} =
+  let clientFd = client.socket.getFd()
+  try:
+    server.selector.unregister(clientFd)
+  except Exception:
+    server.log(DebugLevel, "Error unregistering client socket")
+  finally:
+    client.socket.close()
+    server.connections.del(client.connectionId)
+
+  if client.upgradedToWebSocket:
+    let websocket = WebSocket(
+      server: server,
+      connectionId: client.connectionId
+    )
+    if not client.closeFrameSent:
+      websocket.postWebSocketUpdate(WebSocketUpdate(event: ErrorEvent))
+    websocket.postWebSocketUpdate(WebSocketUpdate(event: CloseEvent))
+
 proc loopForever(server: Server) {.raises: [OSError, IOSelectorsException].} =
   var
     readyKeys: array[maxEventsPerSelectLoop, ReadyKey]
-    receivedFrom, sentTo: seq[SocketHandle]
-    needClosing: HashSet[SocketHandle]
+    receivedFrom, sentTo: seq[SelectorEntry]
+    needClosing: HashSet[ConnectionId]
     encodedResponses: seq[OutgoingBuffer]
     encodedFrames: seq[OutgoingBuffer]
   while true:
     receivedFrom.setLen(0)
     sentTo.setLen(0)
     needClosing.clear()
-    encodedResponses.setLen(0)
-    encodedFrames.setLen(0)
 
     let readyCount = server.selector.selectInto(-1, readyKeys)
 
@@ -1215,98 +1362,21 @@ proc loopForever(server: Server) {.raises: [OSError, IOSelectorsException].} =
     for i in 0 ..< readyCount:
       let readyKey = readyKeys[i]
       if User in readyKey.events:
-        let eventDataEntry = server.selector.getData(readyKey.fd)
-        if eventDataEntry.event == server.responseQueued:
+        let eventEntry = server.selector.getData(readyKey.fd)
+        if eventEntry.event == server.responseQueued:
           responseQueuedTriggered = true
-        if eventDataEntry.event == server.sendQueued:
+        if eventEntry.event == server.sendQueued:
           sendQueuedTriggered = true
-        elif eventDataEntry.event == server.shutdown:
+        elif eventEntry.event == server.shutdown:
           shutdownTriggered = true
         else:
           discard
 
     if responseQueuedTriggered:
-      # If we have responses queued move them to the outgoing buffer queue of
-      # the appropriate socket and update the socket selector to include Write
-
-      withLock server.responseQueueLock:
-        while server.responseQueue.len > 0:
-          encodedResponses.add(server.responseQueue.popFirst())
-
-      for encodedResponse in encodedResponses:
-        if encodedResponse.clientSocket in server.selector:
-          let clientDataEntry =
-            server.selector.getData(encodedResponse.clientSocket)
-          if encodedResponse.clientId == clientDataEntry.clientId:
-            clientDataEntry.outgoingBuffers.addLast(encodedResponse)
-            server.selector.updateHandle2(
-              encodedResponse.clientSocket,
-              {Read, Write}
-            )
-
-            clientDataEntry.requestCounter =
-              max(clientDataEntry.requestCounter - 1, 0)
-
-            if encodedResponse.isWebSocketUpgrade:
-              clientDataEntry.upgradedToWebSocket = true
-              let websocket = WebSocket(
-                server: server,
-                clientSocket: encodedResponse.clientSocket,
-                clientId: encodedResponse.clientId
-              )
-              withLock server.websocketQueuesLock:
-                server.websocketQueues[websocket] = initDeque[WebSocketUpdate]()
-                server.websocketClaimed[websocket] = false
-              websocket.postWebSocketUpdate(WebSocketUpdate(event: OpenEvent))
-              # Are there any sends that were waiting for this response?
-              if clientDataEntry.sendsWaitingForUpgrade.len > 0:
-                for encodedFrame in clientDataEntry.sendsWaitingForUpgrade:
-                  if clientDataEntry.closeFrameQueuedAt > 0:
-                    server.log(DebugLevel, "Dropped message after WebSocket close")
-                  else:
-                    clientDataEntry.outgoingBuffers.addLast(encodedFrame)
-                    if encodedFrame.isCloseFrame:
-                      clientDataEntry.closeFrameQueuedAt = epochTime()
-                clientDataEntry.sendsWaitingForUpgrade.setLen(0)
-          else:
-            # Was this file descriptor reused for a different client?
-            server.log(DebugLevel, "Dropped response to disconnected client")
-        else:
-          server.log(DebugLevel, "Dropped response to disconnected client")
+      server.drainResponseQueue(encodedResponses)
 
     if sendQueuedTriggered:
-      # If we have any sends queued move them to the outgoing buffer queue of
-      # the appropriate socket and update the socket selector to include Write
-
-      withLock server.sendQueueLock:
-        while server.sendQueue.len > 0:
-          encodedFrames.add(server.sendQueue.popFirst())
-
-      for encodedFrame in encodedFrames:
-        if encodedFrame.clientSocket in server.selector:
-          let clientDataEntry =
-            server.selector.getData(encodedFrame.clientSocket)
-          if encodedFrame.clientId == clientDataEntry.clientId:
-            # Have we sent the upgrade response yet?
-            if clientDataEntry.upgradedToWebSocket:
-              if clientDataEntry.closeFrameQueuedAt > 0:
-                server.log(DebugLevel, "Dropped message after WebSocket close")
-              else:
-                clientDataEntry.outgoingBuffers.addLast(encodedFrame)
-                if encodedFrame.isCloseFrame:
-                  clientDataEntry.closeFrameQueuedAt = epochTime()
-                server.selector.updateHandle2(
-                  encodedFrame.clientSocket,
-                  {Read, Write}
-                )
-            else:
-              # If we haven't, queue this to wait for the upgrade response
-              clientDataEntry.sendsWaitingForUpgrade.add(encodedFrame)
-          else:
-            # Was this file descriptor reused for a different client?
-            server.log(DebugLevel, "Dropped message to disconnected client")
-        else:
-          server.log(DebugLevel, "Dropped message to disconnected client")
+      server.drainSendQueue(encodedFrames)
 
     if shutdownTriggered:
       server.destroy(true)
@@ -1318,121 +1388,43 @@ proc loopForever(server: Server) {.raises: [OSError, IOSelectorsException].} =
 
       # echo "Socket ready: ", readyKey.fd, " ", readyKey.events
 
-      let readyDataEntry = server.selector.getData(readyKey.fd)
-      if readyDataEntry.kind == ServerSocketEntry:
-        # We should have a new client socket to accept
+      let entry = server.selector.getData(readyKey.fd)
+      if entry.kind == ListenerEntry:
         if Read in readyKey.events:
-          let listeningSocket = readyKey.fd.SocketHandle
-          let (clientSocket, remoteAddress) =
-            acceptClient(listeningSocket)
-
-          if clientSocket == osInvalidSocket:
-            let error = osLastError()
-            if not isTransientAcceptError(error):
-              raiseOSError(error)
-          else:
-            when not defined(linux):
-              # Not needed on linux where we use SOCK_NONBLOCK.
-              clientSocket.setBlocking(false)
-
-            if server.tcpNoDelay:
-              server.setNoDelay(clientSocket)
-
-            server.clientSockets.incl(clientSocket)
-
-            let dataEntry = DataEntry(kind: ClientSocketEntry)
-            dataEntry.clientId = server.rand.next()
-            dataEntry.remoteAddress = remoteAddress
-            dataEntry.recvBuf.setLen(initialRecvBufLen)
-            server.selector.registerHandle2(clientSocket, {Read}, dataEntry)
-      elif readyDataEntry.kind == ClientSocketEntry:
+          server.acceptConnection(entry)
+      elif entry.kind == ClientEntry:
         if Error in readyKey.events:
-          needClosing.incl(readyKey.fd.SocketHandle)
-          continue
+          needClosing.incl(entry.connectionId)
+        else:
+          if Read in readyKey.events:
+            if entry.receiveFromClient():
+              receivedFrom.add(entry)
+            else:
+              needClosing.incl(entry.connectionId)
 
-        let dataEntry = readyDataEntry
+          if Write in readyKey.events and
+              entry.connectionId notin needClosing:
+            if entry.sendToClient():
+              sentTo.add(entry)
+            else:
+              needClosing.incl(entry.connectionId)
 
-        if Read in readyKey.events:
-          # Expand the buffer if it is full
-          if dataEntry.bytesReceived == dataEntry.recvBuf.len:
-            dataEntry.recvBuf.setLen(dataEntry.recvBuf.len * 2)
+    for client in receivedFrom:
+      if client.connectionId notin needClosing:
+        let needsClosing = server.afterRecv(client)
+        if needsClosing:
+          needClosing.incl(client.connectionId)
 
-          let bytesReceived = readyKey.fd.SocketHandle.recv(
-            dataEntry.recvBuf[dataEntry.bytesReceived].addr,
-            (dataEntry.recvBuf.len - dataEntry.bytesReceived).cint,
-            0
-          )
-          if bytesReceived > 0:
-            dataEntry.bytesReceived += bytesReceived
-            receivedFrom.add(readyKey.fd.SocketHandle)
-          else:
-            needClosing.incl(readyKey.fd.SocketHandle)
-            continue
+    for client in sentTo:
+      if client.connectionId notin needClosing:
+        let needsClosing = server.afterSend(client)
+        if needsClosing:
+          needClosing.incl(client.connectionId)
 
-        if Write in readyKey.events:
-          let
-            outgoingBuffer = dataEntry.outgoingBuffers.peekFirst()
-            bytesSent =
-              if outgoingBuffer.bytesSent < outgoingBuffer.buffer1.len:
-                readyKey.fd.SocketHandle.send(
-                  outgoingBuffer.buffer1[outgoingBuffer.bytesSent].addr,
-                  (outgoingBuffer.buffer1.len - outgoingBuffer.bytesSent).cint,
-                  when defined(MSG_NOSIGNAL): MSG_NOSIGNAL else: 0
-                )
-              else:
-                let buffer2Pos =
-                  outgoingBuffer.bytesSent - outgoingBuffer.buffer1.len
-                readyKey.fd.SocketHandle.send(
-                  outgoingBuffer.buffer2[buffer2Pos].addr,
-                  (outgoingBuffer.buffer2.len - buffer2Pos).cint,
-                  when defined(MSG_NOSIGNAL): MSG_NOSIGNAL else: 0
-                )
-          if bytesSent > 0:
-            outgoingBuffer.bytesSent += bytesSent
-            sentTo.add(readyKey.fd.SocketHandle)
-          else:
-            needClosing.incl(readyKey.fd.SocketHandle)
-            continue
-
-    for clientSocket in receivedFrom:
-      if clientSocket in needClosing:
-        continue
-      let
-        dataEntry = server.selector.getData(clientSocket)
-        needsClosing = server.afterRecv(clientSocket, dataEntry)
-      if needsClosing:
-        needClosing.incl(clientSocket)
-
-    for clientSocket in sentTo:
-      if clientSocket in needClosing:
-        continue
-      let
-        dataEntry = server.selector.getData(clientSocket)
-        needsClosing = server.afterSend(clientSocket, dataEntry)
-      if needsClosing:
-        needClosing.incl(clientSocket)
-
-    for clientSocket in needClosing:
-      let dataEntry = server.selector.getData(clientSocket)
-      try:
-        server.selector.unregister(clientSocket)
-      except Exception as e:
-        # Leaks DataEntry for this socket
-        server.log(DebugLevel, "Error unregistering client socket")
-      finally:
-        clientSocket.close()
-        server.clientSockets.excl(clientSocket)
-      if dataEntry.upgradedToWebSocket:
-        let websocket = WebSocket(
-          server: server,
-          clientSocket: clientSocket,
-          clientId: dataEntry.clientId
-        )
-        if not dataEntry.closeFrameSent:
-          var error = WebSocketUpdate(event: ErrorEvent)
-          websocket.postWebSocketUpdate(error)
-        var close = WebSocketUpdate(event: CloseEvent)
-        websocket.postWebSocketUpdate(close)
+    for connectionId in needClosing:
+      let client = server.connections.getOrDefault(connectionId)
+      if client != nil:
+        server.closeConnection(client)
 
 proc close*(server: Server) {.raises: [], gcsafe.} =
   ## Cleanly stops and deallocates the server.
@@ -1448,7 +1440,7 @@ proc createListeningSocket(
   port: Port,
   domain: Domain,
   ipv6Only: bool
-): SocketHandle =
+): Socket =
   let aiList = getAddrInfo(
     address,
     port,
@@ -1461,29 +1453,33 @@ proc createListeningSocket(
       ai = aiList
       lastError = default(OSErrorCode)
     while ai != nil:
-      let listeningSocket = createNativeSocket(
+      let listeningSocket = newSocket(
         ai.ai_family,
         ai.ai_socktype,
         ai.ai_protocol,
-        false
+        buffered = false,
+        inheritable = false
       )
-      if listeningSocket == osInvalidSocket:
-        raiseOSError(osLastError())
 
       try:
-        listeningSocket.setBlocking(false)
-        listeningSocket.setSockOptInt(SOL_SOCKET, SO_REUSEADDR, 1)
+        listeningSocket.getFd().setBlocking(false)
+        listeningSocket.setSockOpt(OptReuseAddr, true)
         if ipv6Only and ai.ai_family == nativesockets.toInt(Domain.AF_INET6):
-          listeningSocket.setSockOptInt(
+          listeningSocket.getFd().setSockOptInt(
             nativesockets.toInt(Protocol.IPPROTO_IPV6).int,
             when defined(windows): ipv6OnlyOption else: IPV6_V6ONLY.int,
             1
           )
 
-        if bindAddr(listeningSocket, ai.ai_addr, ai.ai_addrlen.SockLen) < 0:
+        # std/net.bindAddr resolves the address again. Bind this addrinfo
+        # candidate directly so later candidates remain available as fallbacks.
+        if bindAddr(
+          listeningSocket.getFd(),
+          ai.ai_addr,
+          ai.ai_addrlen.SockLen
+        ) < 0:
           raiseOSError(osLastError())
-        if nativesockets.listen(listeningSocket, listenBacklogLen) < 0:
-          raiseOSError(osLastError())
+        listeningSocket.listen(listenBacklogLen)
         return listeningSocket
       except OSError as e:
         lastError = e.errorCode.OSErrorCode
@@ -1517,8 +1513,15 @@ proc serveBindings(
         ipv6Only
       )
       server.listeningSockets.add(listeningSocket)
-      let dataEntry = DataEntry(kind: ServerSocketEntry)
-      server.selector.registerHandle2(listeningSocket, {Read}, dataEntry)
+      let listener = SelectorEntry(
+        kind: ListenerEntry,
+        socket: listeningSocket
+      )
+      server.selector.registerHandle2(
+        listeningSocket.getFd(),
+        {Read},
+        listener
+      )
   except Exception as e:
     server.destroy(true)
     raise currentExceptionAsMummyError()
@@ -1586,8 +1589,6 @@ proc newServer*(
   result.maxBodyLen = maxBodyLen
   result.maxMessageLen = maxMessageLen
   result.tcpNoDelay = tcpNoDelay
-  result.rand = initRand()
-
   result.workerThreads.setLen(workerThreads)
 
   # Stuff that can fail
@@ -1596,17 +1597,17 @@ proc newServer*(
     result.sendQueued = newSelectEvent()
     result.shutdown = newSelectEvent()
 
-    result.selector = newSelector[DataEntry]()
+    result.selector = newSelector[SelectorEntry]()
 
-    let responseQueuedData = DataEntry(kind: EventEntry)
+    let responseQueuedData = SelectorEntry(kind: EventEntry)
     responseQueuedData.event = result.responseQueued
     result.selector.registerEvent(result.responseQueued, responseQueuedData)
 
-    let sendQueuedData = DataEntry(kind: EventEntry)
+    let sendQueuedData = SelectorEntry(kind: EventEntry)
     sendQueuedData.event = result.sendQueued
     result.selector.registerEvent(result.sendQueued, sendQueuedData)
 
-    let shutdownData = DataEntry(kind: EventEntry)
+    let shutdownData = SelectorEntry(kind: EventEntry)
     shutdownData.event = result.shutdown
     result.selector.registerEvent(result.shutdown, shutdownData)
 
