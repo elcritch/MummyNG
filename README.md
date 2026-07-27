@@ -2,6 +2,10 @@
 
 Fork of original Mummy with goal of maintaining it while adding missing features. Used in production.
 
+## Additional Features 
+
+- Bind multiple IP addresses and ports, including IPv6.
+
 ## Details 
 
 `atlas use mummy`
