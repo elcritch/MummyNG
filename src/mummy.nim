@@ -5,10 +5,14 @@ when not defined(nimdoc):
 when not compileOption("threads"):
   {.error: "Using --threads:on is required by Mummy.".}
 
-import mummy/common, mummy/internal, std/atomics, std/base64,
-    std/cpuinfo, std/deques, std/hashes, std/nativesockets, std/os,
-    std/monotimes, std/parseutils, std/random, std/selectors, std/sets, crunchy,
-    std/tables, std/times, webby/httpheaders, webby/queryparams, webby/urls,
+import std/[atomics, base64, cpuinfo, times, monotimes, parseutils]
+import std/[options, sets, deques, hashes, tables]
+import std/[nativesockets, os, selectors, random]
+
+import webby/[httpheaders, queryparams, urls]
+import crunchy, zippy
+
+import ./mummy/common, ./mummy/internal
     zippy, std/options
 
 from std/strutils import find, cmpIgnoreCase, toLowerAscii
