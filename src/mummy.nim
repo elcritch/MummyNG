@@ -100,6 +100,7 @@ type
     listeningSockets: seq[SocketHandle]
     selector: Selector[DataEntry]
     responseQueued, sendQueued, shutdown: SelectEvent
+    responseQueuedInitialized, sendQueuedInitialized, shutdownInitialized: bool
     clientSockets: HashSet[SocketHandle]
     taskQueueLock: Lock
     taskQueueCond: Cond
@@ -1178,17 +1179,17 @@ proc destroy(server: Server, joinThreads: bool) {.raises: [].} =
     deinitLock(server.responseQueueLock)
     deinitLock(server.sendQueueLock)
     deinitLock(server.websocketQueuesLock)
-    if server.responseQueued != nil:
+    if server.responseQueuedInitialized:
       try:
         server.responseQueued.close()
       except Exception as e:
         discard # Ignore
-    if server.sendQueued != nil:
+    if server.sendQueuedInitialized:
       try:
         server.sendQueued.close()
       except Exception as e:
         discard # Ignore
-    if server.shutdown != nil:
+    if server.shutdownInitialized:
       try:
         server.shutdown.close()
       except Exception as e:
@@ -1606,8 +1607,11 @@ proc newServer*(
   try:
     when not defined(mummyNoWorkers):
       result.responseQueued = newSelectEvent()
+      result.responseQueuedInitialized = true
       result.sendQueued = newSelectEvent()
+      result.sendQueuedInitialized = true
       result.shutdown = newSelectEvent()
+      result.shutdownInitialized = true
 
       result.selector = newSelector[DataEntry]()
 
