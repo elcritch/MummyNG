@@ -60,9 +60,6 @@
     <ul class="simple simple-toc-section">
       <li><a class="reference" href="#HttpVersion" title="HttpVersion = enum
   Http10, Http11">HttpVersion</a></li>
-<li><a class="reference" href="#LogHandler" title="LogHandler = proc (level: LogLevel; args: varargs[string]) {.gcsafe.}">LogHandler</a></li>
-<li><a class="reference" href="#LogLevel" title="LogLevel = enum
-  DebugLevel, InfoLevel, ErrorLevel">LogLevel</a></li>
 <li><a class="reference" href="#MummyError" title="MummyError = object of CatchableError">MummyError</a></li>
 <li><a class="reference" href="#PathParams" title="PathParams = distinct seq[(string, string)]">PathParams</a></li>
 
@@ -83,10 +80,6 @@
 </ul>
 <ul class="simple nested-toc-section">contains
   <li><a class="reference" href="#contains%2CPathParams%2Cstring" title="contains(pathParams: PathParams; key: string): bool">contains(pathParams: PathParams; key: string): bool</a></li>
-
-</ul>
-<ul class="simple nested-toc-section">echoLogger
-  <li><a class="reference" href="#echoLogger%2CLogLevel%2Cvarargs%5Bstring%5D" title="echoLogger(level: LogLevel; args: varargs[string])">echoLogger(level: LogLevel; args: varargs[string])</a></li>
 
 </ul>
 <ul class="simple nested-toc-section">getOrDefault
@@ -135,27 +128,6 @@
 
   </dd>
 </div>
-<div id="LogHandler">
-  <dt><pre><a href="#LogHandler"><span class="Identifier">LogHandler</span></a> <span class="Other">=</span> <span class="Keyword">proc</span> <span class="Other">(</span><span class="Identifier">level</span><span class="Other">:</span> <a href="#LogLevel"><span class="Identifier">LogLevel</span></a><span class="Other">;</span> <span class="Identifier">args</span><span class="Other">:</span> <span class="Identifier">varargs</span><span class="Other">[</span><span class="Identifier">string</span><span class="Other">]</span><span class="Other">)</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">gcsafe</span></span>.}</pre></dt>
-  <dd>
-    
-    
-    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy/common.nim#L12" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
-<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy/common.nim#L12" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
-
-  </dd>
-</div>
-<div id="LogLevel">
-  <dt><pre><a href="#LogLevel"><span class="Identifier">LogLevel</span></a> <span class="Other">=</span> <span class="Keyword">enum</span>
-  <span class="Identifier">DebugLevel</span><span class="Other">,</span> <span class="Identifier">InfoLevel</span><span class="Other">,</span> <span class="Identifier">ErrorLevel</span></pre></dt>
-  <dd>
-    
-    
-    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy/common.nim#L9" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
-<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy/common.nim#L9" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
-
-  </dd>
-</div>
 <div id="MummyError">
   <dt><pre><a href="#MummyError"><span class="Identifier">MummyError</span></a> <span class="Other">=</span> <span class="Keyword">object</span> <span class="Keyword">of</span> <span class="Identifier">CatchableError</span></pre></dt>
   <dd>
@@ -171,8 +143,8 @@
   <dd>
     
     
-    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy/common.nim#L14" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
-<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy/common.nim#L14" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy/common.nim#L9" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy/common.nim#L9" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
 
   </dd>
 </div>
@@ -189,8 +161,8 @@
   <dd>
     
     Returns the value for key, or an empty string if the key is not present.
-    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy/common.nim#L22" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
-<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy/common.nim#L22" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy/common.nim#L17" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy/common.nim#L17" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
 
   </dd>
 </div>
@@ -203,8 +175,8 @@
   <dd>
     
     Sets the value for the key. If the key is not present, this appends a new key-value pair to the end.
-    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy/common.nim#L28" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
-<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy/common.nim#L28" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy/common.nim#L23" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy/common.nim#L23" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
 
   </dd>
 </div>
@@ -217,22 +189,8 @@
   <dd>
     
     
-    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy/common.nim#L37" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
-<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy/common.nim#L37" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
-
-  </dd>
-</div>
-
-</div>
-<div id="echoLogger-procs-all">
-  <div id="echoLogger,LogLevel,varargs[string]">
-  <dt><pre><span class="Keyword">proc</span> <a href="#echoLogger%2CLogLevel%2Cvarargs%5Bstring%5D"><span class="Identifier">echoLogger</span></a><span class="Other">(</span><span class="Identifier">level</span><span class="Other">:</span> <a href="#LogLevel"><span class="Identifier">LogLevel</span></a><span class="Other">;</span> <span class="Identifier">args</span><span class="Other">:</span> <span class="Identifier">varargs</span><span class="Other">[</span><span class="Identifier">string</span><span class="Other">]</span><span class="Other">)</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span><span class="Other">,</span>
-    <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
-  <dd>
-    
-    This is a simple echo logger.
-    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy/common.nim#L45" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
-<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy/common.nim#L45" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy/common.nim#L32" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy/common.nim#L32" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
 
   </dd>
 </div>
@@ -245,8 +203,8 @@
   <dd>
     
     
-    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy/common.nim#L42" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
-<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy/common.nim#L42" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy/common.nim#L37" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy/common.nim#L37" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
 
   </dd>
 </div>
@@ -265,8 +223,8 @@
   <dd>
     
     
-    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy/common.nim#L19" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
-<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy/common.nim#L19" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy/common.nim#L14" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy/common.nim#L14" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
 
   </dd>
 </div>
@@ -276,8 +234,8 @@
   <dd>
     
     
-    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy/common.nim#L16" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
-<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy/common.nim#L16" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy/common.nim#L11" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy/common.nim#L11" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
 
   </dd>
 </div>
@@ -293,7 +251,7 @@
       <div class="twelve-columns footer">
         <span class="nim-sprite"></span>
         <br>
-        <small style="color: var(--hint);">Made with Nim. Generated: 2026-07-27 15:55:51 UTC</small>
+        <small style="color: var(--hint);">Made with Nim. Generated: 2026-07-29 18:34:02 UTC</small>
       </div>
     </div>
   </div>
