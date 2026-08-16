@@ -8,6 +8,11 @@ const
 var
   openedStreams: Atomic[int]
   failedStreams: Atomic[int]
+  sinkCleanups: Atomic[int]
+
+proc writeFailingSink(data: string) =
+  doAssert data.len > 0
+  raise newException(IOError, "expected sink write failure")
 
 proc handler(request: Request) =
   case request.path
@@ -37,6 +42,18 @@ proc requestBodyHandler(
     doAssert event.data.len <= 4
     if request.path == "/reject-chunk":
       doAssert stream.reject(statusCode = 422, body = "chunk rejected")
+      return
+    if request.path == "/handler-exception":
+      raise newException(ValueError, "expected request body handler failure")
+    if request.path == "/sink-failure":
+      try:
+        writeFailingSink(event.data)
+      except IOError:
+        discard sinkCleanups.fetchAdd(1, moRelaxed)
+        doAssert stream.reject(
+          statusCode = 507,
+          body = "sink write failed"
+        )
       return
     request.body.add(event.data)
   of RequestBodyEnd:
@@ -157,6 +174,25 @@ proc requesterProc() =
     doAssert response.status == "422"
     doAssert response.body == "chunk rejected"
 
+  block handler_exception:
+    let client = newHttpClient()
+    let response = client.post(
+      "http://localhost:" & $port.int & "/handler-exception",
+      streamedBody
+    )
+    doAssert response.status == "500"
+
+  block sink_write_failure:
+    let cleanupsBefore = sinkCleanups.load(moRelaxed)
+    let client = newHttpClient()
+    let response = client.post(
+      "http://localhost:" & $port.int & "/sink-failure",
+      streamedBody
+    )
+    doAssert response.status == "507"
+    doAssert response.body == "sink write failed"
+    doAssert sinkCleanups.load(moRelaxed) == cleanupsBefore + 1
+
   block:
     let response = requestRaw(
       "POST /chunked HTTP/1.1\r\n" &
@@ -189,35 +225,44 @@ proc requesterProc() =
     doAssert openedStreams.load(moRelaxed) == openedBefore
 
   block:
+    let
+      openedBefore = openedStreams.load(moRelaxed)
+      failuresBefore = failedStreams.load(moRelaxed)
     let socket = openTcpSocket()
     socket.sendAll(
       "POST /too-large-chunked HTTP/1.1\r\n" &
       "Host: localhost\r\nTransfer-Encoding: chunked\r\n\r\n" &
       "401\r\n"
     )
-    waitFor(openedStreams, 8)
-    waitFor(failedStreams, 1)
+    waitFor(openedStreams, openedBefore + 1)
+    waitFor(failedStreams, failuresBefore + 1)
     socket.close()
 
   block:
+    let
+      openedBefore = openedStreams.load(moRelaxed)
+      failuresBefore = failedStreams.load(moRelaxed)
     let socket = openTcpSocket()
     socket.sendAll(
       "POST /disconnect HTTP/1.1\r\n" &
       "Host: localhost\r\nContent-Length: 10\r\n\r\nabc"
     )
-    waitFor(openedStreams, 9)
+    waitFor(openedStreams, openedBefore + 1)
     socket.close()
-    waitFor(failedStreams, 2)
+    waitFor(failedStreams, failuresBefore + 1)
 
   block:
+    let
+      openedBefore = openedStreams.load(moRelaxed)
+      failuresBefore = failedStreams.load(moRelaxed)
     let socket = openTcpSocket()
     socket.sendAll(
       "POST /shutdown HTTP/1.1\r\n" &
       "Host: localhost\r\nContent-Length: 10\r\n\r\nabc"
     )
-    waitFor(openedStreams, 10)
+    waitFor(openedStreams, openedBefore + 1)
     server.close()
-    waitFor(failedStreams, 3)
+    waitFor(failedStreams, failuresBefore + 1)
     socket.close()
 
 createThread(requesterThread, requesterProc)
