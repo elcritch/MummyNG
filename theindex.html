@@ -33,7 +33,13 @@
 <li><a class="reference external"
           data-doc-search-tag="mummy: proc `$`(request: Request): string" href="mummy.html#%24%2CRequest">mummy: proc `$`(request: Request): string</a></li>
           <li><a class="reference external"
+          data-doc-search-tag="mummy: proc `$`(stream: RequestBodyStream): string" href="mummy.html#%24%2CRequestBodyStream">mummy: proc `$`(stream: RequestBodyStream): string</a></li>
+          <li><a class="reference external"
           data-doc-search-tag="mummy: proc `$`(websocket: WebSocket): string" href="mummy.html#%24%2CWebSocket">mummy: proc `$`(websocket: WebSocket): string</a></li>
+          </ul></dd>
+<dt><a name="%60%3D%3D%60" href="#%60%3D%3D%60"><span>`==`:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="mummy: proc `==`(a, b: RequestBodyStream): bool" href="mummy.html#%3D%3D%2CRequestBodyStream%2CRequestBodyStream">mummy: proc `==`(a, b: RequestBodyStream): bool</a></li>
           </ul></dd>
 <dt><a name="%60%5B%5D%3D%60" href="#%60%5B%5D%3D%60"><span>`[]=`:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
@@ -42,6 +48,10 @@
 <dt><a name="%60%5B%5D%60" href="#%60%5B%5D%60"><span>`[]`:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
           data-doc-search-tag="common: proc `[]`(pathParams: PathParams; key: string): string" href="mummy/common.html#%5B%5D%2CPathParams%2Cstring">common: proc `[]`(pathParams: PathParams; key: string): string</a></li>
+          </ul></dd>
+<dt><a name="accept" href="#accept"><span>accept:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="mummy: proc accept(stream: RequestBodyStream): bool" href="mummy.html#accept%2CRequestBodyStream">mummy: proc accept(stream: RequestBodyStream): bool</a></li>
           </ul></dd>
 <dt><a name="addRoute" href="#addRoute"><span>addRoute:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
@@ -52,6 +62,10 @@
 <dt><a name="BinaryMessage" href="#BinaryMessage"><span>BinaryMessage:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
           data-doc-search-tag="mummy: MessageKind.BinaryMessage" href="mummy.html#BinaryMessage">mummy: MessageKind.BinaryMessage</a></li>
+          </ul></dd>
+<dt><a name="buffer" href="#buffer"><span>buffer:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="mummy: proc buffer(stream: RequestBodyStream): bool" href="mummy.html#buffer%2CRequestBodyStream">mummy: proc buffer(stream: RequestBodyStream): bool</a></li>
           </ul></dd>
 <dt><a name="close" href="#close"><span>close:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
@@ -101,6 +115,10 @@
 <li><a class="reference external"
           data-doc-search-tag="common: proc getOrDefault(pathParams: PathParams; key, default: string): string" href="mummy/common.html#getOrDefault%2CPathParams%2Cstring%2Cstring">common: proc getOrDefault(pathParams: PathParams; key, default: string): string</a></li>
           </ul></dd>
+<dt><a name="hash" href="#hash"><span>hash:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="mummy: proc hash(stream: RequestBodyStream): Hash" href="mummy.html#hash%2CRequestBodyStream">mummy: proc hash(stream: RequestBodyStream): Hash</a></li>
+          </ul></dd>
 <dt><a name="head" href="#head"><span>head:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
           data-doc-search-tag="routers: proc head(router: var Router; route: string | static string; handler: RequestHandler)" href="routers.html#head%2CRouter%2C%2CRequestHandler">routers: proc head(router: var Router; route: string | static string; handler: RequestHandler)</a></li>
@@ -138,10 +156,14 @@
           data-doc-search-tag="mummy: proc newServer(handler: RequestHandler; websocketHandler: WebSocketHandler = nil;
           workerThreads = max(countProcessors() * 10, 1);
           maxHeadersLen = 8 * 1024; maxBodyLen = 1024 * 1024;
-          maxMessageLen = 64 * 1024; tcpNoDelay = true): Server" href="mummy.html#newServer%2CRequestHandler%2CWebSocketHandler">mummy: proc newServer(handler: RequestHandler; websocketHandler: WebSocketHandler = nil;
+          maxMessageLen = 64 * 1024; tcpNoDelay = true;
+          requestBodyHandler: RequestBodyHandler = nil;
+          requestBodyChunkSize: Positive = 64 * 1024): Server" href="mummy.html#newServer%2CRequestHandler%2CWebSocketHandler%2CRequestBodyHandler%2CPositive">mummy: proc newServer(handler: RequestHandler; websocketHandler: WebSocketHandler = nil;
           workerThreads = max(countProcessors() * 10, 1);
           maxHeadersLen = 8 * 1024; maxBodyLen = 1024 * 1024;
-          maxMessageLen = 64 * 1024; tcpNoDelay = true): Server</a></li>
+          maxMessageLen = 64 * 1024; tcpNoDelay = true;
+          requestBodyHandler: RequestBodyHandler = nil;
+          requestBodyChunkSize: Positive = 64 * 1024): Server</a></li>
           </ul></dd>
 <dt><a name="OpenEvent" href="#OpenEvent"><span>OpenEvent:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
@@ -177,9 +199,47 @@
 <li><a class="reference external"
           data-doc-search-tag="routers: proc put(router: var Router; route: string | static string; handler: RequestHandler)" href="routers.html#put%2CRouter%2C%2CRequestHandler">routers: proc put(router: var Router; route: string | static string; handler: RequestHandler)</a></li>
           </ul></dd>
+<dt><a name="reject" href="#reject"><span>reject:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="mummy: proc reject(stream: RequestBodyStream; statusCode = 413;
+       headers: sink HttpHeaders = emptyHttpHeaders(); body: sink string = &quot;&quot;): bool" href="mummy.html#reject%2CRequestBodyStream%2Cint%2CsinkHttpHeaders%2Csinkstring">mummy: proc reject(stream: RequestBodyStream; statusCode = 413;
+       headers: sink HttpHeaders = emptyHttpHeaders(); body: sink string = &quot;&quot;): bool</a></li>
+          </ul></dd>
 <dt><a name="Request" href="#Request"><span>Request:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
           data-doc-search-tag="mummy: type Request" href="mummy.html#Request">mummy: type Request</a></li>
+          </ul></dd>
+<dt><a name="RequestBodyChunk" href="#RequestBodyChunk"><span>RequestBodyChunk:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="mummy: RequestBodyEventKind.RequestBodyChunk" href="mummy.html#RequestBodyChunk">mummy: RequestBodyEventKind.RequestBodyChunk</a></li>
+          </ul></dd>
+<dt><a name="RequestBodyEnd" href="#RequestBodyEnd"><span>RequestBodyEnd:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="mummy: RequestBodyEventKind.RequestBodyEnd" href="mummy.html#RequestBodyEnd">mummy: RequestBodyEventKind.RequestBodyEnd</a></li>
+          </ul></dd>
+<dt><a name="RequestBodyError" href="#RequestBodyError"><span>RequestBodyError:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="mummy: RequestBodyEventKind.RequestBodyError" href="mummy.html#RequestBodyError">mummy: RequestBodyEventKind.RequestBodyError</a></li>
+          </ul></dd>
+<dt><a name="RequestBodyEvent" href="#RequestBodyEvent"><span>RequestBodyEvent:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="mummy: object RequestBodyEvent" href="mummy.html#RequestBodyEvent">mummy: object RequestBodyEvent</a></li>
+          </ul></dd>
+<dt><a name="RequestBodyEventKind" href="#RequestBodyEventKind"><span>RequestBodyEventKind:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="mummy: enum RequestBodyEventKind" href="mummy.html#RequestBodyEventKind">mummy: enum RequestBodyEventKind</a></li>
+          </ul></dd>
+<dt><a name="RequestBodyHandler" href="#RequestBodyHandler"><span>RequestBodyHandler:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="mummy: type RequestBodyHandler" href="mummy.html#RequestBodyHandler">mummy: type RequestBodyHandler</a></li>
+          </ul></dd>
+<dt><a name="RequestBodyOpen" href="#RequestBodyOpen"><span>RequestBodyOpen:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="mummy: RequestBodyEventKind.RequestBodyOpen" href="mummy.html#RequestBodyOpen">mummy: RequestBodyEventKind.RequestBodyOpen</a></li>
+          </ul></dd>
+<dt><a name="RequestBodyStream" href="#RequestBodyStream"><span>RequestBodyStream:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="mummy: object RequestBodyStream" href="mummy.html#RequestBodyStream">mummy: object RequestBodyStream</a></li>
           </ul></dd>
 <dt><a name="RequestErrorHandler" href="#RequestErrorHandler"><span>RequestErrorHandler:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
@@ -271,7 +331,7 @@
       <div class="twelve-columns footer">
         <span class="nim-sprite"></span>
         <br>
-        <small style="color: var(--hint);">Made with Nim. Generated: 2026-07-29 18:34:02 UTC</small>
+        <small style="color: var(--hint);">Made with Nim. Generated: 2026-08-16 19:53:36 UTC</small>
       </div>
     </div>
   </div>

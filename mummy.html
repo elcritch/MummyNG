@@ -67,6 +67,14 @@
 <li><a class="reference" href="#MessageKind" title="MessageKind = enum
   TextMessage, BinaryMessage, Ping, Pong">MessageKind</a></li>
 <li><a class="reference" href="#Request" title="Request = ptr RequestObj">Request</a></li>
+<li><a class="reference" href="#RequestBodyEvent" title="RequestBodyEvent = object
+  kind*: RequestBodyEventKind ## The lifecycle event kind.
+  data*: string              ## Decoded body bytes for `RequestBodyChunk`; empty otherwise.">RequestBodyEvent</a></li>
+<li><a class="reference" href="#RequestBodyEventKind" title="RequestBodyEventKind = enum
+  RequestBodyOpen, RequestBodyChunk, RequestBodyEnd, RequestBodyError">RequestBodyEventKind</a></li>
+<li><a class="reference" href="#RequestBodyHandler" title="RequestBodyHandler = proc (request: Request; stream: RequestBodyStream;
+                           event: RequestBodyEvent) {.gcsafe.}">RequestBodyHandler</a></li>
+<li><a class="reference" href="#RequestBodyStream" title="RequestBodyStream = object">RequestBodyStream</a></li>
 <li><a class="reference" href="#RequestHandler" title="RequestHandler = proc (request: Request) {.gcsafe.}">RequestHandler</a></li>
 <li><a class="reference" href="#RequestObj" title="RequestObj = object
   httpVersion*: HttpVersion  ## HTTP version from the request line.
@@ -94,7 +102,20 @@
     <ul class="simple simple-toc-section">
       <ul class="simple nested-toc-section">$
   <li><a class="reference" href="#%24%2CRequest" title="`$`(request: Request): string">`$`(request: Request): string</a></li>
+<li><a class="reference" href="#%24%2CRequestBodyStream" title="`$`(stream: RequestBodyStream): string">`$`(stream: RequestBodyStream): string</a></li>
 <li><a class="reference" href="#%24%2CWebSocket" title="`$`(websocket: WebSocket): string">`$`(websocket: WebSocket): string</a></li>
+
+</ul>
+<ul class="simple nested-toc-section">==
+  <li><a class="reference" href="#%3D%3D%2CRequestBodyStream%2CRequestBodyStream" title="`==`(a, b: RequestBodyStream): bool">`==`(a, b: RequestBodyStream): bool</a></li>
+
+</ul>
+<ul class="simple nested-toc-section">accept
+  <li><a class="reference" href="#accept%2CRequestBodyStream" title="accept(stream: RequestBodyStream): bool">accept(stream: RequestBodyStream): bool</a></li>
+
+</ul>
+<ul class="simple nested-toc-section">buffer
+  <li><a class="reference" href="#buffer%2CRequestBodyStream" title="buffer(stream: RequestBodyStream): bool">buffer(stream: RequestBodyStream): bool</a></li>
 
 </ul>
 <ul class="simple nested-toc-section">close
@@ -102,14 +123,28 @@
 <li><a class="reference" href="#close%2CWebSocket" title="close(websocket: WebSocket)">close(websocket: WebSocket)</a></li>
 
 </ul>
+<ul class="simple nested-toc-section">hash
+  <li><a class="reference" href="#hash%2CRequestBodyStream" title="hash(stream: RequestBodyStream): Hash">hash(stream: RequestBodyStream): Hash</a></li>
+
+</ul>
 <ul class="simple nested-toc-section">newServer
-  <li><a class="reference" href="#newServer%2CRequestHandler%2CWebSocketHandler" title="newServer(handler: RequestHandler; websocketHandler: WebSocketHandler = nil;
+  <li><a class="reference" href="#newServer%2CRequestHandler%2CWebSocketHandler%2CRequestBodyHandler%2CPositive" title="newServer(handler: RequestHandler; websocketHandler: WebSocketHandler = nil;
           workerThreads = max(countProcessors() * 10, 1);
           maxHeadersLen = 8 * 1024; maxBodyLen = 1024 * 1024;
-          maxMessageLen = 64 * 1024; tcpNoDelay = true): Server">newServer(handler: RequestHandler; websocketHandler: WebSocketHandler = nil;
+          maxMessageLen = 64 * 1024; tcpNoDelay = true;
+          requestBodyHandler: RequestBodyHandler = nil;
+          requestBodyChunkSize: Positive = 64 * 1024): Server">newServer(handler: RequestHandler; websocketHandler: WebSocketHandler = nil;
           workerThreads = max(countProcessors() * 10, 1);
           maxHeadersLen = 8 * 1024; maxBodyLen = 1024 * 1024;
-          maxMessageLen = 64 * 1024; tcpNoDelay = true): Server</a></li>
+          maxMessageLen = 64 * 1024; tcpNoDelay = true;
+          requestBodyHandler: RequestBodyHandler = nil;
+          requestBodyChunkSize: Positive = 64 * 1024): Server</a></li>
+
+</ul>
+<ul class="simple nested-toc-section">reject
+  <li><a class="reference" href="#reject%2CRequestBodyStream%2Cint%2CsinkHttpHeaders%2Csinkstring" title="reject(stream: RequestBodyStream; statusCode = 413;
+       headers: sink HttpHeaders = emptyHttpHeaders(); body: sink string = &quot;&quot;): bool">reject(stream: RequestBodyStream; statusCode = 413;
+       headers: sink HttpHeaders = emptyHttpHeaders(); body: sink string = &quot;&quot;): bool</a></li>
 
 </ul>
 <ul class="simple nested-toc-section">respond
@@ -173,8 +208,8 @@
   <dd>
     
     
-    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L78" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
-<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L78" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L84" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L84" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
 
   </dd>
 </div>
@@ -184,8 +219,8 @@
   <dd>
     
     
-    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L85" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
-<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L85" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L98" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L98" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
 
   </dd>
 </div>
@@ -199,13 +234,59 @@
 
   </dd>
 </div>
+<div id="RequestBodyEvent">
+  <dt><pre><a href="#RequestBodyEvent"><span class="Identifier">RequestBodyEvent</span></a> <span class="Other">=</span> <span class="Keyword">object</span>
+  <span class="Identifier">kind</span><span class="Operator">*</span><span class="Other">:</span> <a href="#RequestBodyEventKind"><span class="Identifier">RequestBodyEventKind</span></a> <span class="Comment">## The lifecycle event kind.</span>
+  <span class="Identifier">data</span><span class="Operator">*</span><span class="Other">:</span> <span class="Identifier">string</span>              <span class="Comment">## Decoded body bytes for `RequestBodyChunk`; empty otherwise.</span></pre></dt>
+  <dd>
+    
+    One serialized incoming request body event.
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L94" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L94" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+
+  </dd>
+</div>
+<div id="RequestBodyEventKind">
+  <dt><pre><a href="#RequestBodyEventKind"><span class="Identifier">RequestBodyEventKind</span></a> <span class="Other">=</span> <span class="Keyword">enum</span>
+  <span class="Identifier">RequestBodyOpen</span><span class="Other">,</span> <span class="Identifier">RequestBodyChunk</span><span class="Other">,</span> <span class="Identifier">RequestBodyEnd</span><span class="Other">,</span> <span class="Identifier">RequestBodyError</span></pre></dt>
+  <dd>
+    
+    Incoming request body lifecycle event kinds.
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L91" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L91" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+
+  </dd>
+</div>
+<div id="RequestBodyHandler">
+  <dt><pre><a href="#RequestBodyHandler"><span class="Identifier">RequestBodyHandler</span></a> <span class="Other">=</span> <span class="Keyword">proc</span> <span class="Other">(</span><span class="Identifier">request</span><span class="Other">:</span> <a href="#Request"><span class="Identifier">Request</span></a><span class="Other">;</span> <span class="Identifier">stream</span><span class="Other">:</span> <a href="#RequestBodyStream"><span class="Identifier">RequestBodyStream</span></a><span class="Other">;</span>
+                           <span class="Identifier">event</span><span class="Other">:</span> <a href="#RequestBodyEvent"><span class="Identifier">RequestBodyEvent</span></a><span class="Other">)</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">gcsafe</span></span>.}</pre></dt>
+  <dd>
+    
+    <p>Handles incoming request bodies selected for streaming.</p>
+<p>Calls are serialized per stream and run on worker threads. During <tt class="docutils literal"><span class="pre"><span class="Identifier">RequestBodyOpen</span></span></tt>, call <tt class="docutils literal"><span class="pre"><span class="Identifier">accept</span></span></tt>, <tt class="docutils literal"><span class="pre"><span class="Identifier">buffer</span></span></tt>, or <tt class="docutils literal"><span class="pre"><span class="Identifier">reject</span></span></tt>. If no decision is made, Mummy preserves compatibility by buffering the body and later invoking the ordinary request handler. An accepted stream does not invoke the ordinary request handler: respond by <tt class="docutils literal"><span class="pre"><span class="Identifier">RequestBodyEnd</span></span></tt> instead. Mummy sends a 500 response if the end callback returns without one. Returning from each chunk callback permits the selector thread to read the next bounded chunk. <tt class="docutils literal"><span class="pre"><span class="Identifier">RequestBodyError</span></span></tt> is terminal and allows sinks to clean up after a disconnect, protocol error, or server shutdown.</p>
+
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L109" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L109" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+
+  </dd>
+</div>
+<div id="RequestBodyStream">
+  <dt><pre><a href="#RequestBodyStream"><span class="Identifier">RequestBodyStream</span></a> <span class="Other">=</span> <span class="Keyword">object</span></pre></dt>
+  <dd>
+    
+    Identifies one incoming request body stream.
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L78" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L78" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+
+  </dd>
+</div>
 <div id="RequestHandler">
   <dt><pre><a href="#RequestHandler"><span class="Identifier">RequestHandler</span></a> <span class="Other">=</span> <span class="Keyword">proc</span> <span class="Other">(</span><span class="Identifier">request</span><span class="Other">:</span> <a href="#Request"><span class="Identifier">Request</span></a><span class="Other">)</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">gcsafe</span></span>.}</pre></dt>
   <dd>
     
     
-    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L88" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
-<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L88" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L101" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L101" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
 
   </dd>
 </div>
@@ -233,8 +314,8 @@
   <dd>
     
     
-    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L121" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
-<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L121" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L183" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L183" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
 
   </dd>
 </div>
@@ -254,8 +335,8 @@
   <dd>
     
     
-    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L82" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
-<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L82" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L88" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L88" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
 
   </dd>
 </div>
@@ -265,8 +346,8 @@
   <dd>
     
     
-    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L90" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
-<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L90" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L103" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L103" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
 
   </dd>
 </div>
@@ -282,8 +363,18 @@
   <dd>
     
     
-    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L178" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
-<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L178" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L251" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L251" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+
+  </dd>
+</div>
+<div id="$,RequestBodyStream">
+  <dt><pre><span class="Keyword">proc</span> <a href="#%24%2CRequestBodyStream"><span class="Identifier">`$`</span></a><span class="Other">(</span><span class="Identifier">stream</span><span class="Other">:</span> <a href="#RequestBodyStream"><span class="Identifier">RequestBodyStream</span></a><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">string</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+  <dd>
+    
+    Returns a diagnostic representation of an incoming request body stream.
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L278" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L278" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
 
   </dd>
 </div>
@@ -292,8 +383,53 @@
   <dd>
     
     
-    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L188" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
-<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L188" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L261" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L261" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+
+  </dd>
+</div>
+
+</div>
+<div id="==-procs-all">
+  <div id="==,RequestBodyStream,RequestBodyStream">
+  <dt><pre><span class="Keyword">proc</span> <a href="#%3D%3D%2CRequestBodyStream%2CRequestBodyStream"><span class="Identifier">`==`</span></a><span class="Other">(</span><span class="Identifier">a</span><span class="Other">,</span> <span class="Identifier">b</span><span class="Other">:</span> <a href="#RequestBodyStream"><span class="Identifier">RequestBodyStream</span></a><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">bool</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+  <dd>
+    
+    Returns whether two handles identify the same incoming request body.
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L264" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L264" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+
+  </dd>
+</div>
+
+</div>
+<div id="accept-procs-all">
+  <div id="accept,RequestBodyStream">
+  <dt><pre><span class="Keyword">proc</span> <a href="#accept%2CRequestBodyStream"><span class="Identifier">accept</span></a><span class="Other">(</span><span class="Identifier">stream</span><span class="Other">:</span> <a href="#RequestBodyStream"><span class="Identifier">RequestBodyStream</span></a><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">bool</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">gcsafe</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span><span class="Other">,</span>
+    <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+  <dd>
+    
+    <p>Selects event-driven delivery for this body.</p>
+<p>This succeeds only during <tt class="docutils literal"><span class="pre"><span class="Identifier">RequestBodyOpen</span></span></tt>. Body data is decoded from HTTP framing and delivered through serialized <tt class="docutils literal"><span class="pre"><span class="Identifier">RequestBodyChunk</span></span></tt> events.</p>
+
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L315" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L315" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+
+  </dd>
+</div>
+
+</div>
+<div id="buffer-procs-all">
+  <div id="buffer,RequestBodyStream">
+  <dt><pre><span class="Keyword">proc</span> <a href="#buffer%2CRequestBodyStream"><span class="Identifier">buffer</span></a><span class="Other">(</span><span class="Identifier">stream</span><span class="Other">:</span> <a href="#RequestBodyStream"><span class="Identifier">RequestBodyStream</span></a><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">bool</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">gcsafe</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span><span class="Other">,</span>
+    <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+  <dd>
+    
+    <p>Selects compatibility buffering for this body.</p>
+<p>This succeeds only during <tt class="docutils literal"><span class="pre"><span class="Identifier">RequestBodyOpen</span></span></tt>. After the complete body has been received, the ordinary request handler is invoked with <tt class="docutils literal"><span class="pre"><span class="Identifier">request</span><span class="Operator">.</span><span class="Identifier">body</span></span></tt> populated exactly as it is when no request body handler is configured.</p>
+
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L323" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L323" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
 
   </dd>
 </div>
@@ -301,12 +437,12 @@
 </div>
 <div id="close-procs-all">
   <div id="close,Server">
-  <dt><pre><span class="Keyword">proc</span> <a href="#close%2CServer"><span class="Identifier">close</span></a><span class="Other">(</span><span class="Identifier">server</span><span class="Other">:</span> <a href="#Server"><span class="Identifier">Server</span></a><span class="Other">)</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">gcsafe</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+  <dt><pre><span class="Keyword">proc</span> <a href="#close%2CServer"><span class="Identifier">close</span></a><span class="Other">(</span><span class="Identifier">server</span><span class="Other">:</span> <a href="#Server"><span class="Identifier">Server</span></a><span class="Other">)</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">gcsafe</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">RootEffect</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
   <dd>
     
-    Cleanly stops and deallocates the server. In-flight request handler calls will be allowed to finish. No additional handler calls will be dispatched even if they are queued.
-    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L1484" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
-<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L1484" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+    Cleanly stops and deallocates the server. In-flight handler calls are allowed to finish. Active request body streams receive their terminal event so handlers can release resources. No queued ordinary request or WebSocket handler calls are newly dispatched.
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L2092" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L2092" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
 
   </dd>
 </div>
@@ -315,26 +451,59 @@
   <dd>
     
     Begins the WebSocket closing handshake. This does not discard previously queued messages before starting the closing handshake. The handshake will only begin after the queued messages are sent.
-    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L288" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
-<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L288" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L456" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L456" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+
+  </dd>
+</div>
+
+</div>
+<div id="hash-procs-all">
+  <div id="hash,RequestBodyStream">
+  <dt><pre><span class="Keyword">proc</span> <a href="#hash%2CRequestBodyStream"><span class="Identifier">hash</span></a><span class="Other">(</span><span class="Identifier">stream</span><span class="Other">:</span> <a href="#RequestBodyStream"><span class="Identifier">RequestBodyStream</span></a><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">Hash</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+  <dd>
+    
+    Returns a hash suitable for using a request body stream as a table key.
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L271" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L271" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
 
   </dd>
 </div>
 
 </div>
 <div id="newServer-procs-all">
-  <div id="newServer,RequestHandler,WebSocketHandler">
-  <dt><pre><span class="Keyword">proc</span> <a href="#newServer%2CRequestHandler%2CWebSocketHandler"><span class="Identifier">newServer</span></a><span class="Other">(</span><span class="Identifier">handler</span><span class="Other">:</span> <a href="#RequestHandler"><span class="Identifier">RequestHandler</span></a><span class="Other">;</span>
+  <div id="newServer,RequestHandler,WebSocketHandler,RequestBodyHandler,Positive">
+  <dt><pre><span class="Keyword">proc</span> <a href="#newServer%2CRequestHandler%2CWebSocketHandler%2CRequestBodyHandler%2CPositive"><span class="Identifier">newServer</span></a><span class="Other">(</span><span class="Identifier">handler</span><span class="Other">:</span> <a href="#RequestHandler"><span class="Identifier">RequestHandler</span></a><span class="Other">;</span>
                <span class="Identifier">websocketHandler</span><span class="Other">:</span> <a href="#WebSocketHandler"><span class="Identifier">WebSocketHandler</span></a> <span class="Other">=</span> <span class="Keyword">nil</span><span class="Other">;</span>
                <span class="Identifier">workerThreads</span> <span class="Other">=</span> <span class="Identifier">max</span><span class="Other">(</span><span class="Identifier">countProcessors</span><span class="Other">(</span><span class="Other">)</span> <span class="Operator">*</span> <span class="DecNumber">10</span><span class="Other">,</span> <span class="DecNumber">1</span><span class="Other">)</span><span class="Other">;</span>
                <span class="Identifier">maxHeadersLen</span> <span class="Other">=</span> <span class="DecNumber">8</span> <span class="Operator">*</span> <span class="DecNumber">1024</span><span class="Other">;</span> <span class="Identifier">maxBodyLen</span> <span class="Other">=</span> <span class="DecNumber">1024</span> <span class="Operator">*</span> <span class="DecNumber">1024</span><span class="Other">;</span>
-               <span class="Identifier">maxMessageLen</span> <span class="Other">=</span> <span class="DecNumber">64</span> <span class="Operator">*</span> <span class="DecNumber">1024</span><span class="Other">;</span> <span class="Identifier">tcpNoDelay</span> <span class="Other">=</span> <span class="Identifier">true</span><span class="Other">)</span><span class="Other">:</span> <a href="#Server"><span class="Identifier">Server</span></a> {.
-    <span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><a href="mummy/common.html#MummyError"><span class="Identifier">MummyError</span></a><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+               <span class="Identifier">maxMessageLen</span> <span class="Other">=</span> <span class="DecNumber">64</span> <span class="Operator">*</span> <span class="DecNumber">1024</span><span class="Other">;</span> <span class="Identifier">tcpNoDelay</span> <span class="Other">=</span> <span class="Identifier">true</span><span class="Other">;</span>
+               <span class="Identifier">requestBodyHandler</span><span class="Other">:</span> <a href="#RequestBodyHandler"><span class="Identifier">RequestBodyHandler</span></a> <span class="Other">=</span> <span class="Keyword">nil</span><span class="Other">;</span>
+               <span class="Identifier">requestBodyChunkSize</span><span class="Other">:</span> <span class="Identifier">Positive</span> <span class="Other">=</span> <span class="DecNumber">64</span> <span class="Operator">*</span> <span class="DecNumber">1024</span><span class="Other">)</span><span class="Other">:</span> <a href="#Server"><span class="Identifier">Server</span></a> {.
+    <span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><a href="mummy/common.html#MummyError"><span class="Identifier">MummyError</span></a><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">RootEffect</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
   <dd>
     
-    Creates a new HTTP server. The request handler will be called for incoming HTTP requests. The WebSocket handler will be called for WebSocket events. Calls to the HTTP and WebSocket handlers are made from worker threads. WebSocket events are dispatched serially per connection. This means your WebSocket handler must return from a call before the next call will be dispatched for the same connection.
-    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L1607" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
-<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L1607" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+    Creates a new HTTP server. The request handler will be called for incoming HTTP requests. The WebSocket handler will be called for WebSocket events. Calls to the HTTP and WebSocket handlers are made from worker threads. When <tt class="docutils literal"><span class="pre"><span class="Identifier">requestBodyHandler</span></span></tt> is set, it may select event-driven delivery for individual non-empty request bodies. Otherwise request bodies continue to be buffered and passed to the ordinary request handler. Request body calls are serialized per stream and their chunks are at most <tt class="docutils literal"><span class="pre"><span class="Identifier">requestBodyChunkSize</span></span></tt> bytes. WebSocket events are dispatched serially per connection. This means your WebSocket handler must return from a call before the next call will be dispatched for the same connection.
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L2216" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L2216" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+
+  </dd>
+</div>
+
+</div>
+<div id="reject-procs-all">
+  <div id="reject,RequestBodyStream,int,sinkHttpHeaders,sinkstring">
+  <dt><pre><span class="Keyword">proc</span> <a href="#reject%2CRequestBodyStream%2Cint%2CsinkHttpHeaders%2Csinkstring"><span class="Identifier">reject</span></a><span class="Other">(</span><span class="Identifier">stream</span><span class="Other">:</span> <a href="#RequestBodyStream"><span class="Identifier">RequestBodyStream</span></a><span class="Other">;</span> <span class="Identifier">statusCode</span> <span class="Other">=</span> <span class="DecNumber">413</span><span class="Other">;</span>
+            <span class="Identifier">headers</span><span class="Other">:</span> <span class="Identifier">sink</span> <span class="Identifier">HttpHeaders</span> <span class="Other">=</span> <span class="Identifier">emptyHttpHeaders</span><span class="Other">(</span><span class="Other">)</span><span class="Other">;</span>
+            <span class="Identifier">body</span><span class="Other">:</span> <span class="Identifier">sink</span> <span class="Identifier">string</span> <span class="Other">=</span> <span class="StringLit">&quot;&quot;</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">bool</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">gcsafe</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span><span class="Other">,</span>
+    <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+  <dd>
+    
+    <p>Rejects this request body and sends a response that closes the connection.</p>
+<p>This succeeds during <tt class="docutils literal"><span class="pre"><span class="Identifier">RequestBodyOpen</span></span></tt> or <tt class="docutils literal"><span class="pre"><span class="Identifier">RequestBodyChunk</span></span></tt>. Closing the connection avoids buffering or draining the remainder of the rejected body. Previously delivered chunks remain the handler's responsibility.</p>
+
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L570" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L570" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
 
   </dd>
 </div>
@@ -348,8 +517,8 @@
   <dd>
     
     Sends the response for the request. This should usually only be called once per request.
-    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L308" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
-<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L308" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L476" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L476" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
 
   </dd>
 </div>
@@ -361,8 +530,8 @@
   <dd>
     
     Check if this request has been responded. Informational responses (1xx status codes) do not mark a request responded.
-    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L1679" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
-<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L1679" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L2309" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L2309" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
 
   </dd>
 </div>
@@ -375,8 +544,8 @@
   <dd>
     
     Enqueues the message to be sent over the WebSocket connection.
-    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L257" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
-<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L257" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L425" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L425" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
 
   </dd>
 </div>
@@ -385,25 +554,25 @@
 <div id="serve-procs-all">
   <div id="serve,Server,openArray[]">
   <dt><pre><span class="Keyword">proc</span> <a href="#serve%2CServer%2CopenArray%5B%5D"><span class="Identifier">serve</span></a><span class="Other">(</span><span class="Identifier">server</span><span class="Other">:</span> <a href="#Server"><span class="Identifier">Server</span></a><span class="Other">;</span> <span class="Identifier">bindings</span><span class="Other">:</span> <span class="Identifier">openArray</span><span class="Other">[</span><span class="Other">(</span><span class="Identifier">string</span><span class="Other">,</span> <span class="Identifier">Port</span><span class="Other">)</span><span class="Other">]</span><span class="Other">)</span> {.
-    <span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><a href="mummy/common.html#MummyError"><span class="Identifier">MummyError</span></a><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">WriteIOEffect</span><span class="Other">,</span> <span class="Identifier">ReadIOEffect</span><span class="Other">,</span> <span class="Identifier">TimeEffect</span><span class="Other">]</span><span class="Other">,</span>
-    <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+    <span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><a href="mummy/common.html#MummyError"><span class="Identifier">MummyError</span></a><span class="Other">]</span><span class="Other">,</span>
+    <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">WriteIOEffect</span><span class="Other">,</span> <span class="Identifier">ReadIOEffect</span><span class="Other">,</span> <span class="Identifier">RootEffect</span><span class="Other">,</span> <span class="Identifier">TimeEffect</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
   <dd>
     
     The server will serve on every <tt class="docutils literal"><span class="pre"><span class="Punctuation">(</span><span class="Identifier">address</span><span class="Punctuation">,</span> <span class="Identifier">port</span><span class="Punctuation">)</span></span></tt> binding. IPv4 and IPv6 addresses and different ports can be used together. This call does not return unless server.close() is called from another thread.
-    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L1597" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
-<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L1597" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L2206" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L2206" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
 
   </dd>
 </div>
 <div id="serve,Server,Port,string">
   <dt><pre><span class="Keyword">proc</span> <a href="#serve%2CServer%2CPort%2Cstring"><span class="Identifier">serve</span></a><span class="Other">(</span><span class="Identifier">server</span><span class="Other">:</span> <a href="#Server"><span class="Identifier">Server</span></a><span class="Other">;</span> <span class="Identifier">port</span><span class="Other">:</span> <span class="Identifier">Port</span><span class="Other">;</span> <span class="Identifier">address</span> <span class="Other">=</span> <span class="StringLit">&quot;localhost&quot;</span><span class="Other">)</span> {.
-    <span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><a href="mummy/common.html#MummyError"><span class="Identifier">MummyError</span></a><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">WriteIOEffect</span><span class="Other">,</span> <span class="Identifier">ReadIOEffect</span><span class="Other">,</span> <span class="Identifier">TimeEffect</span><span class="Other">]</span><span class="Other">,</span>
-    <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+    <span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><a href="mummy/common.html#MummyError"><span class="Identifier">MummyError</span></a><span class="Other">]</span><span class="Other">,</span>
+    <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">WriteIOEffect</span><span class="Other">,</span> <span class="Identifier">ReadIOEffect</span><span class="Other">,</span> <span class="Identifier">RootEffect</span><span class="Other">,</span> <span class="Identifier">TimeEffect</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
   <dd>
     
     The server will serve on the address and port. The default address is localhost. Use &quot;0.0.0.0&quot; to make the server externally accessible (with caution). This call does not return unless server.close() is called from another thread.
-    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L1585" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
-<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L1585" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L2194" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L2194" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
 
   </dd>
 </div>
@@ -416,8 +585,8 @@
   <dd>
     
     Upgrades the request to a WebSocket connection. You can immediately start calling send(). Future updates for this WebSocket will be calls to the websocketHandler provided to <tt class="docutils literal"><span class="pre"><span class="Identifier">newServer</span></span></tt>. The first event will be onOpen. Note: if the client disconnects before receiving this upgrade response, no onOpen event will be received.
-    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L402" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
-<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L402" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L590" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L590" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
 
   </dd>
 </div>
@@ -430,8 +599,8 @@
   <dd>
     
     This proc blocks until the server is ready to receive requests or the timeout has passed. The timeout is in floating point seconds. This is useful when writing tests, where you need to know the server is ready before you begin sending requests. If the server is already ready this returns immediately.
-    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L1685" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
-<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L1685" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L2315" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L2315" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
 
   </dd>
 </div>
@@ -453,7 +622,7 @@
       <div class="twelve-columns footer">
         <span class="nim-sprite"></span>
         <br>
-        <small style="color: var(--hint);">Made with Nim. Generated: 2026-07-29 18:34:02 UTC</small>
+        <small style="color: var(--hint);">Made with Nim. Generated: 2026-08-16 19:53:36 UTC</small>
       </div>
     </div>
   </div>
