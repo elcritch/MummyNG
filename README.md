@@ -9,11 +9,11 @@ Fork of original Mummy with goal of maintaining it while adding missing features
 
 ## Details 
 
-`atlas use mummy`
+`atlas use gh:elcritch/mummyng`
 
 or
 
-`nimble install mummy`
+`nimble install gh:elcritch/mummyng`
 
 ![Github Actions](https://github.com/elcritch/mummy/workflows/Github%20Actions/badge.svg)
 
