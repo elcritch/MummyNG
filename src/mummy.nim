@@ -94,6 +94,7 @@ type
   RequestBodyEvent* = object ## One serialized incoming request body event.
     kind*: RequestBodyEventKind ## The lifecycle event kind.
     data*: string ## Decoded body bytes for `RequestBodyChunk`; empty otherwise.
+    bytesReceived*: int ## Cumulative decoded bytes delivered through chunk events.
 
   MessageKind* = enum
     TextMessage, BinaryMessage, Ping, Pong
@@ -132,6 +133,7 @@ type
   RequestBodyState = object
     request: Request
     updates: Deque[RequestBodyUpdate]
+    bytesReceived: int
     claimed, handlingEvent, terminalQueued: bool
     currentEvent: RequestBodyEventKind
     decision: RequestBodyDecision
@@ -663,6 +665,9 @@ proc postRequestBodyUpdate(
       var state = addr stream.server.requestBodies.states[stream]
       if state.terminalQueued:
         return
+      if update.event.kind == RequestBodyChunk:
+        state.bytesReceived += update.event.data.len
+      update.event.bytesReceived = state.bytesReceived
       if update.event.kind in {RequestBodyEnd, RequestBodyError}:
         state.terminalQueued = true
       state.updates.addLast(move update)
