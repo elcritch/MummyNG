@@ -127,11 +127,12 @@ bounded-memory uploads, pass a `requestBodyHandler` to `newServer` and call
 
 Accepted bodies arrive as dechunked `RequestBodyChunk` events, one at a time.
 Returning from a chunk event allows Mummy to read the next chunk, providing
-backpressure. Finish and cleanup work belongs in `RequestBodyEnd` and
-`RequestBodyError`, respectively. Call `stream.buffer()`—or make no decision—to
-retain the ordinary `request.body` behavior for a request. `stream.reject()`
-sends an error response and closes the connection without reading the rest of
-the body.
+backpressure. `event.bytesReceived` reports the cumulative decoded bytes
+delivered for the stream, including the current chunk. Finish and cleanup work
+belongs in `RequestBodyEnd` and `RequestBodyError`, respectively. Call
+`stream.buffer()`—or make no decision—to retain the ordinary `request.body`
+behavior for a request. `stream.reject()` sends an error response and closes
+the connection without reading the rest of the body.
 
 `maxBodyLen` remains the total decoded-body limit, while
 `requestBodyChunkSize` bounds each delivered chunk. The
@@ -141,6 +142,27 @@ upload to disk:
 ```sh
 nim c --threads:on --mm:orc --path:src -r examples/basic_upload.nim
 curl --data-binary @my-file.bin -X PUT http://localhost:8080/upload
+```
+
+Applications can use `mummy/requestbody`'s thread-safe
+`RequestBodyRegistry[T]` to associate a file, socket, parser, or other sink with
+each active stream. The registry operations do not hold their lock while the
+caller uses a retrieved value. Close the registry after the server and its
+handlers have stopped.
+
+For `multipart/form-data`, `mummy/multipart` provides `MultipartDecoder`. Pass
+each `RequestBodyChunk` to `feed`, handle the returned part-begin, part-data,
+and part-end events, then call `finish` at `RequestBodyEnd`. Part headers are
+bounded independently and file data is emitted incrementally rather than
+retained in `request.body`.
+
+The [`streaming_proxy.nim`](examples/streaming_proxy.nim) example combines the
+registry and cumulative byte count to forward an upload to another HTTP server
+with bounded memory and backpressure:
+
+```sh
+nim c --threads:on --mm:orc --path:src -r examples/streaming_proxy.nim
+curl --data-binary @large-file.bin http://localhost:8080/upload
 ```
 
 This is a generic request-body primitive rather than a multipart-only API, so

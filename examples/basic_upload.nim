@@ -1,24 +1,19 @@
 import mummy
-import std/[atomics, locks, os, tables]
+import mummy/requestbody
+import std/[atomics, os]
 
 type Upload = object
   file: File
   path: string
 
 var
-  uploadLock: Lock
-  uploads {.guard: uploadLock.}: Table[RequestBodyStream, Upload]
+  uploads = newRequestBodyRegistry[Upload]()
   nextUploadId: Atomic[int]
 
-initLock(uploadLock)
 createDir("uploads")
 
 proc takeUpload(stream: RequestBodyStream): Upload {.gcsafe.} =
-  {.gcsafe.}:
-    withLock uploadLock:
-      if stream in uploads:
-        result = uploads[stream]
-        uploads.del(stream)
+  discard uploads.take(stream, result)
 
 proc discardUpload(stream: RequestBodyStream) {.gcsafe.} =
   let upload = takeUpload(stream)
@@ -45,18 +40,13 @@ proc requestBodyHandler(
     let path = "uploads" / ("upload-" & $id & ".bin")
     try:
       let upload = Upload(file: open(path, fmWrite), path: path)
-      {.gcsafe.}:
-        withLock uploadLock:
-          uploads[stream] = upload
+      uploads[stream] = upload
       discard stream.accept()
     except IOError:
       discard stream.reject(statusCode = 500, body = "Could not open upload")
   of RequestBodyChunk:
     var upload: Upload
-    {.gcsafe.}:
-      withLock uploadLock:
-        if stream in uploads:
-          upload = uploads[stream]
+    discard uploads.get(stream, upload)
     if upload.file == nil:
       discard stream.reject(statusCode = 500)
       return
@@ -86,3 +76,4 @@ let server = newServer(
 echo "Upload with:"
 echo "curl --data-binary @my-file.bin -X PUT http://localhost:8080/upload"
 server.serve(Port(8080))
+uploads.close()

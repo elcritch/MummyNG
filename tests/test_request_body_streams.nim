@@ -40,6 +40,7 @@ proc requestBodyHandler(
       doAssert stream.accept()
   of RequestBodyChunk:
     doAssert event.data.len <= 4
+    doAssert event.bytesReceived == request.body.len + event.data.len
     if request.path == "/reject-chunk":
       doAssert stream.reject(statusCode = 422, body = "chunk rejected")
       return
@@ -58,8 +59,10 @@ proc requestBodyHandler(
     request.body.add(event.data)
   of RequestBodyEnd:
     doAssert not stream.accept()
+    doAssert event.bytesReceived == request.body.len
     request.respond(200, body = request.body)
   of RequestBodyError:
+    doAssert event.bytesReceived == request.body.len
     discard failedStreams.fetchAdd(1, moRelaxed)
 
 static:
