@@ -9,7 +9,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
-        nim-version: ['2.2.10', 'stable']
+        nim-version: ['stable']
 
     runs-on: ${{ matrix.os }}
 
@@ -42,6 +42,11 @@ jobs:
     - run: nim c -r -d:useMalloc tests/test_request_body_streams.nim
     - run: nim c -r -d:useMalloc tests/test_response_body_streams.nim
     - run: nim c -r -d:useMalloc tests/test_sse.nim
+    - run: nim c -r -d:useMalloc tests/test_request_body_backpressure.nim
+    - run: nim c -r -d:useMalloc tests/test_request_body_registry.nim
+    - run: nim c -r -d:useMalloc tests/test_multipart.nim
+    - run: nim c -r -d:useMalloc tests/test_streaming_multipart.nim
+    - run: nim c -r -d:useMalloc tests/fuzz_multipart.nim
     - run: nim c --mm:atomicArc -r -d:useMalloc tests/test_http.nim
       if: ${{ matrix.atomic_arc }}
     - run: nim c -r -d:useMalloc tests/test_http2.nim

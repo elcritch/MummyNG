@@ -18,3 +18,22 @@ for i in 0 ..< valid.len:
     discard request.decodeMultipart()
   except:
     discard
+
+proc tryStreaming(body: string, chunkSize: Positive) =
+  var decoder = initMultipartDecoder(request)
+  var offset = 0
+  try:
+    while offset < body.len:
+      let ending = min(offset + chunkSize, body.len)
+      discard decoder.feed(body[offset ..< ending])
+      offset = ending
+    discard decoder.finish()
+  except MummyError:
+    discard
+
+for chunkSize in 1 .. 16:
+  tryStreaming(valid, chunkSize)
+
+for i in 0 ..< valid.len:
+  tryStreaming(valid[0 .. i], 7)
+  tryStreaming(valid[i .. ^1], 7)
