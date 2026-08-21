@@ -1,0 +1,7 @@
+nimTitle	sse	sse.html	module src/mummy/sse		0
+nim	SseEvent	sse.html#SseEvent	object SseEvent		10
+nim	encode	sse.html#encode,SseEvent	proc encode(event: SseEvent): string		38
+nim	respondSse	sse.html#respondSse,Request,int,sinkHttpHeaders	proc respondSse(request: Request; statusCode = 200;\n           headers: sink HttpHeaders = emptyHttpHeaders(); start = true): ResponseBodyStream		59
+nim	send	sse.html#send,ResponseBodyStream,SseEvent	proc send(stream: ResponseBodyStream; event: SseEvent): bool		76
+nim	comment	sse.html#comment,ResponseBodyStream,string	proc comment(stream: ResponseBodyStream; text: string): bool		82
+nim	heartbeat	sse.html#heartbeat,ResponseBodyStream,string	proc heartbeat(stream: ResponseBodyStream; comment = "keep-alive"): bool		89

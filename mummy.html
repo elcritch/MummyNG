@@ -87,6 +87,14 @@
   headers*: HttpHeaders      ## HTTP headers key-value pairs.
   body*: string              ## Request body.
   remoteAddress*: string     ## Network address of the request sender.">RequestObj</a></li>
+<li><a class="reference" href="#ResponseBodyEventKind" title="ResponseBodyEventKind = enum
+  ResponseBodyOpen,         ## The headers are attached and the stream can accept a write.
+  ResponseBodyWritable,     ## The previously accepted body chunk has been fully sent.
+  ResponseBodyError,        ## The handler or transport failed; no more writes are accepted.
+  ResponseBodyClosed         ## The stream is closed and its application state can be released.">ResponseBodyEventKind</a></li>
+<li><a class="reference" href="#ResponseBodyHandler" title="ResponseBodyHandler = proc (stream: ResponseBodyStream;
+                            event: ResponseBodyEventKind) {.gcsafe.}">ResponseBodyHandler</a></li>
+<li><a class="reference" href="#ResponseBodyStream" title="ResponseBodyStream = object">ResponseBodyStream</a></li>
 <li><a class="reference" href="#Server" title="Server = ptr ServerObj">Server</a></li>
 <li><a class="reference" href="#WebSocket" title="WebSocket = object">WebSocket</a></li>
 <li><a class="reference" href="#WebSocketEvent" title="WebSocketEvent = enum
@@ -104,11 +112,13 @@
       <ul class="simple nested-toc-section">$
   <li><a class="reference" href="#%24%2CRequest" title="`$`(request: Request): string">`$`(request: Request): string</a></li>
 <li><a class="reference" href="#%24%2CRequestBodyStream" title="`$`(stream: RequestBodyStream): string">`$`(stream: RequestBodyStream): string</a></li>
+<li><a class="reference" href="#%24%2CResponseBodyStream" title="`$`(stream: ResponseBodyStream): string">`$`(stream: ResponseBodyStream): string</a></li>
 <li><a class="reference" href="#%24%2CWebSocket" title="`$`(websocket: WebSocket): string">`$`(websocket: WebSocket): string</a></li>
 
 </ul>
 <ul class="simple nested-toc-section">==
   <li><a class="reference" href="#%3D%3D%2CRequestBodyStream%2CRequestBodyStream" title="`==`(a, b: RequestBodyStream): bool">`==`(a, b: RequestBodyStream): bool</a></li>
+<li><a class="reference" href="#%3D%3D%2CResponseBodyStream%2CResponseBodyStream" title="`==`(a, b: ResponseBodyStream): bool">`==`(a, b: ResponseBodyStream): bool</a></li>
 
 </ul>
 <ul class="simple nested-toc-section">accept
@@ -121,25 +131,29 @@
 </ul>
 <ul class="simple nested-toc-section">close
   <li><a class="reference" href="#close%2CServer" title="close(server: Server)">close(server: Server)</a></li>
+<li><a class="reference" href="#close%2CResponseBodyStream" title="close(stream: ResponseBodyStream)">close(stream: ResponseBodyStream)</a></li>
 <li><a class="reference" href="#close%2CWebSocket" title="close(websocket: WebSocket)">close(websocket: WebSocket)</a></li>
 
 </ul>
 <ul class="simple nested-toc-section">hash
   <li><a class="reference" href="#hash%2CRequestBodyStream" title="hash(stream: RequestBodyStream): Hash">hash(stream: RequestBodyStream): Hash</a></li>
+<li><a class="reference" href="#hash%2CResponseBodyStream" title="hash(stream: ResponseBodyStream): Hash">hash(stream: ResponseBodyStream): Hash</a></li>
 
 </ul>
 <ul class="simple nested-toc-section">newServer
-  <li><a class="reference" href="#newServer%2CRequestHandler%2CWebSocketHandler%2CRequestBodyHandler%2CPositive" title="newServer(handler: RequestHandler; websocketHandler: WebSocketHandler = nil;
+  <li><a class="reference" href="#newServer%2CRequestHandler%2CWebSocketHandler%2CRequestBodyHandler%2CPositive%2CResponseBodyHandler" title="newServer(handler: RequestHandler; websocketHandler: WebSocketHandler = nil;
           workerThreads = max(countProcessors() * 10, 1);
           maxHeadersLen = 8 * 1024; maxBodyLen = 1024 * 1024;
           maxMessageLen = 64 * 1024; tcpNoDelay = true;
           requestBodyHandler: RequestBodyHandler = nil;
-          requestBodyChunkSize: Positive = 64 * 1024): Server">newServer(handler: RequestHandler; websocketHandler: WebSocketHandler = nil;
+          requestBodyChunkSize: Positive = 64 * 1024;
+          responseBodyHandler: ResponseBodyHandler = nil): Server">newServer(handler: RequestHandler; websocketHandler: WebSocketHandler = nil;
           workerThreads = max(countProcessors() * 10, 1);
           maxHeadersLen = 8 * 1024; maxBodyLen = 1024 * 1024;
           maxMessageLen = 64 * 1024; tcpNoDelay = true;
           requestBodyHandler: RequestBodyHandler = nil;
-          requestBodyChunkSize: Positive = 64 * 1024): Server</a></li>
+          requestBodyChunkSize: Positive = 64 * 1024;
+          responseBodyHandler: ResponseBodyHandler = nil): Server</a></li>
 
 </ul>
 <ul class="simple nested-toc-section">reject
@@ -158,6 +172,12 @@
   <li><a class="reference" href="#responded%2CRequest" title="responded(request: Request): bool">responded(request: Request): bool</a></li>
 
 </ul>
+<ul class="simple nested-toc-section">respondStream
+  <li><a class="reference" href="#respondStream%2CRequest%2Cint%2CsinkHttpHeaders" title="respondStream(request: Request; statusCode = 200;
+              headers: sink HttpHeaders = emptyHttpHeaders(); start = true): ResponseBodyStream">respondStream(request: Request; statusCode = 200;
+              headers: sink HttpHeaders = emptyHttpHeaders(); start = true): ResponseBodyStream</a></li>
+
+</ul>
 <ul class="simple nested-toc-section">send
   <li><a class="reference" href="#send%2CWebSocket%2Csinkstring" title="send(websocket: WebSocket; data: sink string; kind = TextMessage)">send(websocket: WebSocket; data: sink string; kind = TextMessage)</a></li>
 
@@ -167,12 +187,20 @@
 <li><a class="reference" href="#serve%2CServer%2CPort%2Cstring" title="serve(server: Server; port: Port; address = &quot;localhost&quot;)">serve(server: Server; port: Port; address = &quot;localhost&quot;)</a></li>
 
 </ul>
+<ul class="simple nested-toc-section">start
+  <li><a class="reference" href="#start%2CResponseBodyStream" title="start(stream: ResponseBodyStream)">start(stream: ResponseBodyStream)</a></li>
+
+</ul>
 <ul class="simple nested-toc-section">upgradeToWebSocket
   <li><a class="reference" href="#upgradeToWebSocket%2CRequest" title="upgradeToWebSocket(request: Request): WebSocket">upgradeToWebSocket(request: Request): WebSocket</a></li>
 
 </ul>
 <ul class="simple nested-toc-section">waitUntilReady
   <li><a class="reference" href="#waitUntilReady%2CServer%2Cfloat" title="waitUntilReady(server: Server; timeout: float = 10.0)">waitUntilReady(server: Server; timeout: float = 10.0)</a></li>
+
+</ul>
+<ul class="simple nested-toc-section">write
+  <li><a class="reference" href="#write%2CResponseBodyStream%2Csinkstring" title="write(stream: ResponseBodyStream; data: sink string): bool">write(stream: ResponseBodyStream; data: sink string): bool</a></li>
 
 </ul>
 
@@ -209,8 +237,8 @@
   <dd>
     
     
-    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L84" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
-<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L84" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L90" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L90" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
 
   </dd>
 </div>
@@ -220,8 +248,8 @@
   <dd>
     
     
-    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L99" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
-<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L99" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L111" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L111" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
 
   </dd>
 </div>
@@ -243,8 +271,8 @@
   <dd>
     
     One serialized incoming request body event.
-    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L94" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
-<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L94" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L100" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L100" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
 
   </dd>
 </div>
@@ -254,8 +282,8 @@
   <dd>
     
     Incoming request body lifecycle event kinds.
-    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L91" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
-<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L91" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L97" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L97" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
 
   </dd>
 </div>
@@ -267,8 +295,8 @@
     <p>Handles incoming request bodies selected for streaming.</p>
 <p>Calls are serialized per stream and run on worker threads. During <tt class="docutils literal"><span class="pre"><span class="Identifier">RequestBodyOpen</span></span></tt>, call <tt class="docutils literal"><span class="pre"><span class="Identifier">accept</span></span></tt>, <tt class="docutils literal"><span class="pre"><span class="Identifier">buffer</span></span></tt>, or <tt class="docutils literal"><span class="pre"><span class="Identifier">reject</span></span></tt>. If no decision is made, Mummy preserves compatibility by buffering the body and later invoking the ordinary request handler. An accepted stream does not invoke the ordinary request handler: respond by <tt class="docutils literal"><span class="pre"><span class="Identifier">RequestBodyEnd</span></span></tt> instead. Mummy sends a 500 response if the end callback returns without one. Returning from each chunk callback permits the selector thread to read the next bounded chunk. <tt class="docutils literal"><span class="pre"><span class="Identifier">RequestBodyError</span></span></tt> is terminal and allows sinks to clean up after a disconnect, protocol error, or server shutdown.</p>
 
-    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L110" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
-<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L110" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L122" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L122" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
 
   </dd>
 </div>
@@ -287,8 +315,8 @@
   <dd>
     
     
-    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L102" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
-<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L102" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L114" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L114" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
 
   </dd>
 </div>
@@ -311,13 +339,48 @@
 
   </dd>
 </div>
+<div id="ResponseBodyEventKind">
+  <dt><pre><a href="#ResponseBodyEventKind"><span class="Identifier">ResponseBodyEventKind</span></a> <span class="Other">=</span> <span class="Keyword">enum</span>
+  <span class="Identifier">ResponseBodyOpen</span><span class="Other">,</span>         <span class="Comment">## The headers are attached and the stream can accept a write.</span>
+  <span class="Identifier">ResponseBodyWritable</span><span class="Other">,</span>     <span class="Comment">## The previously accepted body chunk has been fully sent.</span>
+  <span class="Identifier">ResponseBodyError</span><span class="Other">,</span>        <span class="Comment">## The handler or transport failed; no more writes are accepted.</span>
+  <span class="Identifier">ResponseBodyClosed</span>         <span class="Comment">## The stream is closed and its application state can be released.</span></pre></dt>
+  <dd>
+    
+    Outgoing response body lifecycle event kinds.
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L105" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L105" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+
+  </dd>
+</div>
+<div id="ResponseBodyHandler">
+  <dt><pre><a href="#ResponseBodyHandler"><span class="Identifier">ResponseBodyHandler</span></a> <span class="Other">=</span> <span class="Keyword">proc</span> <span class="Other">(</span><span class="Identifier">stream</span><span class="Other">:</span> <a href="#ResponseBodyStream"><span class="Identifier">ResponseBodyStream</span></a><span class="Other">;</span>
+                            <span class="Identifier">event</span><span class="Other">:</span> <a href="#ResponseBodyEventKind"><span class="Identifier">ResponseBodyEventKind</span></a><span class="Other">)</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">gcsafe</span></span>.}</pre></dt>
+  <dd>
+    
+    Handles serialized outgoing response body lifecycle events on workers. <tt class="docutils literal"><span class="pre"><span class="Identifier">ResponseBodyOpen</span></span></tt> is emitted after response headers attach to a live connection. Call <tt class="docutils literal"><span class="pre"><span class="Identifier">write</span></span></tt> once during Open or Writable; the next Writable arrives only after that chunk has been fully sent. Error and Closed are terminal, in that order when a transport failure occurs.
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L139" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L139" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+
+  </dd>
+</div>
+<div id="ResponseBodyStream">
+  <dt><pre><a href="#ResponseBodyStream"><span class="Identifier">ResponseBodyStream</span></a> <span class="Other">=</span> <span class="Keyword">object</span></pre></dt>
+  <dd>
+    
+    Identifies one outgoing response body stream.
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L84" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L84" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+
+  </dd>
+</div>
 <div id="Server">
   <dt><pre><a href="#Server"><span class="Identifier">Server</span></a> <span class="Other">=</span> <span class="Keyword">ptr</span> <span class="Identifier">ServerObj</span></pre></dt>
   <dd>
     
     
-    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L185" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
-<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L185" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L224" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L224" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
 
   </dd>
 </div>
@@ -337,8 +400,8 @@
   <dd>
     
     
-    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L88" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
-<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L88" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L94" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L94" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
 
   </dd>
 </div>
@@ -348,8 +411,8 @@
   <dd>
     
     
-    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L104" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
-<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L104" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L116" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L116" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
 
   </dd>
 </div>
@@ -365,8 +428,8 @@
   <dd>
     
     
-    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L253" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
-<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L253" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L297" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L297" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
 
   </dd>
 </div>
@@ -375,8 +438,18 @@
   <dd>
     
     Returns a diagnostic representation of an incoming request body stream.
-    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L280" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
-<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L280" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L324" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L324" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+
+  </dd>
+</div>
+<div id="$,ResponseBodyStream">
+  <dt><pre><span class="Keyword">proc</span> <a href="#%24%2CResponseBodyStream"><span class="Identifier">`$`</span></a><span class="Other">(</span><span class="Identifier">stream</span><span class="Other">:</span> <a href="#ResponseBodyStream"><span class="Identifier">ResponseBodyStream</span></a><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">string</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+  <dd>
+    
+    Returns a diagnostic representation of an outgoing response body stream.
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L340" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L340" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
 
   </dd>
 </div>
@@ -385,8 +458,8 @@
   <dd>
     
     
-    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L263" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
-<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L263" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L307" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L307" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
 
   </dd>
 </div>
@@ -398,8 +471,18 @@
   <dd>
     
     Returns whether two handles identify the same incoming request body.
-    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L266" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
-<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L266" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L310" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L310" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+
+  </dd>
+</div>
+<div id="==,ResponseBodyStream,ResponseBodyStream">
+  <dt><pre><span class="Keyword">proc</span> <a href="#%3D%3D%2CResponseBodyStream%2CResponseBodyStream"><span class="Identifier">`==`</span></a><span class="Other">(</span><span class="Identifier">a</span><span class="Other">,</span> <span class="Identifier">b</span><span class="Other">:</span> <a href="#ResponseBodyStream"><span class="Identifier">ResponseBodyStream</span></a><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">bool</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+  <dd>
+    
+    Returns whether two handles identify the same outgoing response body.
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L328" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L328" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
 
   </dd>
 </div>
@@ -414,8 +497,8 @@
     <p>Selects event-driven delivery for this body.</p>
 <p>This succeeds only during <tt class="docutils literal"><span class="pre"><span class="Identifier">RequestBodyOpen</span></span></tt>. Body data is decoded from HTTP framing and delivered through serialized <tt class="docutils literal"><span class="pre"><span class="Identifier">RequestBodyChunk</span></span></tt> events.</p>
 
-    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L317" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
-<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L317" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L377" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L377" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
 
   </dd>
 </div>
@@ -430,8 +513,8 @@
     <p>Selects compatibility buffering for this body.</p>
 <p>This succeeds only during <tt class="docutils literal"><span class="pre"><span class="Identifier">RequestBodyOpen</span></span></tt>. After the complete body has been received, the ordinary request handler is invoked with <tt class="docutils literal"><span class="pre"><span class="Identifier">request</span><span class="Operator">.</span><span class="Identifier">body</span></span></tt> populated exactly as it is when no request body handler is configured.</p>
 
-    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L325" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
-<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L325" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L385" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L385" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
 
   </dd>
 </div>
@@ -442,9 +525,20 @@
   <dt><pre><span class="Keyword">proc</span> <a href="#close%2CServer"><span class="Identifier">close</span></a><span class="Other">(</span><span class="Identifier">server</span><span class="Other">:</span> <a href="#Server"><span class="Identifier">Server</span></a><span class="Other">)</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">gcsafe</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">RootEffect</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
   <dd>
     
-    Cleanly stops and deallocates the server. In-flight handler calls are allowed to finish. Active request body streams receive their terminal event so handlers can release resources. No queued ordinary request or WebSocket handler calls are newly dispatched.
-    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L2097" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
-<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L2097" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+    Cleanly stops and deallocates the server. In-flight handler calls are allowed to finish. Active request and response body streams receive terminal events so handlers can release resources. No queued ordinary request or WebSocket handler calls are newly dispatched.
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L2550" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L2550" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+
+  </dd>
+</div>
+<div id="close,ResponseBodyStream">
+  <dt><pre><span class="Keyword">proc</span> <a href="#close%2CResponseBodyStream"><span class="Identifier">close</span></a><span class="Other">(</span><span class="Identifier">stream</span><span class="Other">:</span> <a href="#ResponseBodyStream"><span class="Identifier">ResponseBodyStream</span></a><span class="Other">)</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">gcsafe</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span><span class="Other">,</span>
+    <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+  <dd>
+    
+    
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L640" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L640" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
 
   </dd>
 </div>
@@ -453,8 +547,8 @@
   <dd>
     
     Begins the WebSocket closing handshake. This does not discard previously queued messages before starting the closing handshake. The handshake will only begin after the queued messages are sent.
-    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L458" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
-<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L458" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L518" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L518" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
 
   </dd>
 </div>
@@ -466,28 +560,39 @@
   <dd>
     
     Returns a hash suitable for using a request body stream as a table key.
-    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L273" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
-<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L273" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L317" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L317" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+
+  </dd>
+</div>
+<div id="hash,ResponseBodyStream">
+  <dt><pre><span class="Keyword">proc</span> <a href="#hash%2CResponseBodyStream"><span class="Identifier">hash</span></a><span class="Other">(</span><span class="Identifier">stream</span><span class="Other">:</span> <a href="#ResponseBodyStream"><span class="Identifier">ResponseBodyStream</span></a><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">Hash</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+  <dd>
+    
+    Returns a hash suitable for using a response body stream as a table key.
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L333" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L333" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
 
   </dd>
 </div>
 
 </div>
 <div id="newServer-procs-all">
-  <div id="newServer,RequestHandler,WebSocketHandler,RequestBodyHandler,Positive">
-  <dt><pre><span class="Keyword">proc</span> <a href="#newServer%2CRequestHandler%2CWebSocketHandler%2CRequestBodyHandler%2CPositive"><span class="Identifier">newServer</span></a><span class="Other">(</span><span class="Identifier">handler</span><span class="Other">:</span> <a href="#RequestHandler"><span class="Identifier">RequestHandler</span></a><span class="Other">;</span>
+  <div id="newServer,RequestHandler,WebSocketHandler,RequestBodyHandler,Positive,ResponseBodyHandler">
+  <dt><pre><span class="Keyword">proc</span> <a href="#newServer%2CRequestHandler%2CWebSocketHandler%2CRequestBodyHandler%2CPositive%2CResponseBodyHandler"><span class="Identifier">newServer</span></a><span class="Other">(</span><span class="Identifier">handler</span><span class="Other">:</span> <a href="#RequestHandler"><span class="Identifier">RequestHandler</span></a><span class="Other">;</span>
                <span class="Identifier">websocketHandler</span><span class="Other">:</span> <a href="#WebSocketHandler"><span class="Identifier">WebSocketHandler</span></a> <span class="Other">=</span> <span class="Keyword">nil</span><span class="Other">;</span>
                <span class="Identifier">workerThreads</span> <span class="Other">=</span> <span class="Identifier">max</span><span class="Other">(</span><span class="Identifier">countProcessors</span><span class="Other">(</span><span class="Other">)</span> <span class="Operator">*</span> <span class="DecNumber">10</span><span class="Other">,</span> <span class="DecNumber">1</span><span class="Other">)</span><span class="Other">;</span>
                <span class="Identifier">maxHeadersLen</span> <span class="Other">=</span> <span class="DecNumber">8</span> <span class="Operator">*</span> <span class="DecNumber">1024</span><span class="Other">;</span> <span class="Identifier">maxBodyLen</span> <span class="Other">=</span> <span class="DecNumber">1024</span> <span class="Operator">*</span> <span class="DecNumber">1024</span><span class="Other">;</span>
                <span class="Identifier">maxMessageLen</span> <span class="Other">=</span> <span class="DecNumber">64</span> <span class="Operator">*</span> <span class="DecNumber">1024</span><span class="Other">;</span> <span class="Identifier">tcpNoDelay</span> <span class="Other">=</span> <span class="Identifier">true</span><span class="Other">;</span>
                <span class="Identifier">requestBodyHandler</span><span class="Other">:</span> <a href="#RequestBodyHandler"><span class="Identifier">RequestBodyHandler</span></a> <span class="Other">=</span> <span class="Keyword">nil</span><span class="Other">;</span>
-               <span class="Identifier">requestBodyChunkSize</span><span class="Other">:</span> <span class="Identifier">Positive</span> <span class="Other">=</span> <span class="DecNumber">64</span> <span class="Operator">*</span> <span class="DecNumber">1024</span><span class="Other">)</span><span class="Other">:</span> <a href="#Server"><span class="Identifier">Server</span></a> {.
+               <span class="Identifier">requestBodyChunkSize</span><span class="Other">:</span> <span class="Identifier">Positive</span> <span class="Other">=</span> <span class="DecNumber">64</span> <span class="Operator">*</span> <span class="DecNumber">1024</span><span class="Other">;</span>
+               <span class="Identifier">responseBodyHandler</span><span class="Other">:</span> <a href="#ResponseBodyHandler"><span class="Identifier">ResponseBodyHandler</span></a> <span class="Other">=</span> <span class="Keyword">nil</span><span class="Other">)</span><span class="Other">:</span> <a href="#Server"><span class="Identifier">Server</span></a> {.
     <span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><a href="mummy/common.html#MummyError"><span class="Identifier">MummyError</span></a><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">RootEffect</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
   <dd>
     
-    Creates a new HTTP server. The request handler will be called for incoming HTTP requests. The WebSocket handler will be called for WebSocket events. Calls to the HTTP and WebSocket handlers are made from worker threads. When <tt class="docutils literal"><span class="pre"><span class="Identifier">requestBodyHandler</span></span></tt> is set, it may select event-driven delivery for individual non-empty request bodies. Otherwise request bodies continue to be buffered and passed to the ordinary request handler. Request body calls are serialized per stream and their chunks are at most <tt class="docutils literal"><span class="pre"><span class="Identifier">requestBodyChunkSize</span></span></tt> bytes. WebSocket events are dispatched serially per connection. This means your WebSocket handler must return from a call before the next call will be dispatched for the same connection.
-    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L2221" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
-<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L2221" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+    Creates a new HTTP server. The request handler will be called for incoming HTTP requests. The WebSocket handler will be called for WebSocket events. Calls to the HTTP and WebSocket handlers are made from worker threads. When <tt class="docutils literal"><span class="pre"><span class="Identifier">requestBodyHandler</span></span></tt> is set, it may select event-driven delivery for individual non-empty request bodies. Otherwise request bodies continue to be buffered and passed to the ordinary request handler. Request body calls are serialized per stream and their chunks are at most <tt class="docutils literal"><span class="pre"><span class="Identifier">requestBodyChunkSize</span></span></tt> bytes. <tt class="docutils literal"><span class="pre"><span class="Identifier">responseBodyHandler</span></span></tt>, when set, receives serialized lifecycle events for response streams created with <tt class="docutils literal"><span class="pre"><span class="Identifier">respondStream</span></span></tt>. WebSocket events are dispatched serially per connection. This means your WebSocket handler must return from a call before the next call will be dispatched for the same connection.
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L2674" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L2674" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
 
   </dd>
 </div>
@@ -504,8 +609,8 @@
     <p>Rejects this request body and sends a response that closes the connection.</p>
 <p>This succeeds during <tt class="docutils literal"><span class="pre"><span class="Identifier">RequestBodyOpen</span></span></tt> or <tt class="docutils literal"><span class="pre"><span class="Identifier">RequestBodyChunk</span></span></tt>. Closing the connection avoids buffering or draining the remainder of the rejected body. Previously delivered chunks remain the handler's responsibility.</p>
 
-    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L572" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
-<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L572" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L814" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L814" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
 
   </dd>
 </div>
@@ -519,8 +624,8 @@
   <dd>
     
     Sends the response for the request. This should usually only be called once per request.
-    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L478" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
-<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L478" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L538" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L538" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
 
   </dd>
 </div>
@@ -532,8 +637,26 @@
   <dd>
     
     Check if this request has been responded. Informational responses (1xx status codes) do not mark a request responded.
-    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L2314" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
-<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L2314" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L2773" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L2773" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+
+  </dd>
+</div>
+
+</div>
+<div id="respondStream-procs-all">
+  <div id="respondStream,Request,int,sinkHttpHeaders">
+  <dt><pre><span class="Keyword">proc</span> <a href="#respondStream%2CRequest%2Cint%2CsinkHttpHeaders"><span class="Identifier">respondStream</span></a><span class="Other">(</span><span class="Identifier">request</span><span class="Other">:</span> <a href="#Request"><span class="Identifier">Request</span></a><span class="Other">;</span> <span class="Identifier">statusCode</span> <span class="Other">=</span> <span class="DecNumber">200</span><span class="Other">;</span>
+                   <span class="Identifier">headers</span><span class="Other">:</span> <span class="Identifier">sink</span> <span class="Identifier">HttpHeaders</span> <span class="Other">=</span> <span class="Identifier">emptyHttpHeaders</span><span class="Other">(</span><span class="Other">)</span><span class="Other">;</span> <span class="Identifier">start</span> <span class="Other">=</span> <span class="Identifier">true</span><span class="Other">)</span><span class="Other">:</span> <a href="#ResponseBodyStream"><span class="Identifier">ResponseBodyStream</span></a> {.
+    <span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">gcsafe</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+  <dd>
+    
+    <p>Creates a bounded, backpressured streaming response body.</p>
+<p>HTTP/1.1 responses use chunked framing; HTTP/1.0 responses close after the final body bytes. HEAD and bodyless status responses are sent normally and return an invalid handle, so <tt class="docutils literal"><span class="pre"><span class="Identifier">write</span></span></tt> safely returns false.</p>
+<p>Pass <tt class="docutils literal"><span class="pre"><span class="Identifier">start</span> <span class="Operator">=</span> <span class="Identifier">false</span></span></tt> when application state must be associated with the returned handle before <tt class="docutils literal"><span class="pre"><span class="Identifier">ResponseBodyOpen</span></span></tt> can run, then call <tt class="docutils literal"><span class="pre"><span class="Identifier">start</span></span></tt>.</p>
+
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L664" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L664" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
 
   </dd>
 </div>
@@ -546,8 +669,8 @@
   <dd>
     
     Enqueues the message to be sent over the WebSocket connection.
-    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L427" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
-<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L427" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L487" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L487" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
 
   </dd>
 </div>
@@ -561,8 +684,8 @@
   <dd>
     
     The server will serve on every <tt class="docutils literal"><span class="pre"><span class="Punctuation">(</span><span class="Identifier">address</span><span class="Punctuation">,</span> <span class="Identifier">port</span><span class="Punctuation">)</span></span></tt> binding. IPv4 and IPv6 addresses and different ports can be used together. This call does not return unless server.close() is called from another thread.
-    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L2211" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
-<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L2211" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L2664" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L2664" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
 
   </dd>
 </div>
@@ -573,8 +696,22 @@
   <dd>
     
     The server will serve on the address and port. The default address is localhost. Use &quot;0.0.0.0&quot; to make the server externally accessible (with caution). This call does not return unless server.close() is called from another thread.
-    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L2199" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
-<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L2199" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L2652" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L2652" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+
+  </dd>
+</div>
+
+</div>
+<div id="start-procs-all">
+  <div id="start,ResponseBodyStream">
+  <dt><pre><span class="Keyword">proc</span> <a href="#start%2CResponseBodyStream"><span class="Identifier">start</span></a><span class="Other">(</span><span class="Identifier">stream</span><span class="Other">:</span> <a href="#ResponseBodyStream"><span class="Identifier">ResponseBodyStream</span></a><span class="Other">)</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">gcsafe</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span><span class="Other">,</span>
+    <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+  <dd>
+    
+    Starts a response body stream created with <tt class="docutils literal"><span class="pre"><span class="Identifier">respondStream</span><span class="Punctuation">(</span><span class="Operator">...</span><span class="Punctuation">,</span> <span class="Identifier">start</span> <span class="Operator">=</span> <span class="Identifier">false</span><span class="Punctuation">)</span></span></tt>. Calling this more than once has no effect.
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L642" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L642" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
 
   </dd>
 </div>
@@ -587,8 +724,8 @@
   <dd>
     
     Upgrades the request to a WebSocket connection. You can immediately start calling send(). Future updates for this WebSocket will be calls to the websocketHandler provided to <tt class="docutils literal"><span class="pre"><span class="Identifier">newServer</span></span></tt>. The first event will be onOpen. Note: if the client disconnects before receiving this upgrade response, no onOpen event will be received.
-    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L592" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
-<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L592" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L834" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L834" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
 
   </dd>
 </div>
@@ -601,8 +738,24 @@
   <dd>
     
     This proc blocks until the server is ready to receive requests or the timeout has passed. The timeout is in floating point seconds. This is useful when writing tests, where you need to know the server is ready before you begin sending requests. If the server is already ready this returns immediately.
-    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L2320" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
-<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L2320" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L2779" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L2779" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
+
+  </dd>
+</div>
+
+</div>
+<div id="write-procs-all">
+  <div id="write,ResponseBodyStream,sinkstring">
+  <dt><pre><span class="Keyword">proc</span> <a href="#write%2CResponseBodyStream%2Csinkstring"><span class="Identifier">write</span></a><span class="Other">(</span><span class="Identifier">stream</span><span class="Other">:</span> <a href="#ResponseBodyStream"><span class="Identifier">ResponseBodyStream</span></a><span class="Other">;</span> <span class="Identifier">data</span><span class="Other">:</span> <span class="Identifier">sink</span> <span class="Identifier">string</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">bool</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span><span class="Other">,</span>
+    <span class="Identifier">gcsafe</span><span class="Other">,</span> <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
+  <dd>
+    
+    <p>Queues one body chunk when the stream is Open or Writable.</p>
+<p>Returns false when another chunk is pending or the stream is not writable. An empty string is an accepted no-op and does not consume writability.</p>
+
+    <a href="https://github.com/elcritch/MummyNG/tree/master/src/mummy.nim#L740" class="link-seesrc" target="_blank">Source</a>&nbsp;&nbsp;
+<a href="https://github.com/elcritch/MummyNG/edit/devel/src/mummy.nim#L740" class="link-seesrc" target="_blank" >Edit</a>&nbsp;&nbsp;
 
   </dd>
 </div>
@@ -624,7 +777,7 @@
       <div class="twelve-columns footer">
         <span class="nim-sprite"></span>
         <br>
-        <small style="color: var(--hint);">Made with Nim. Generated: 2026-08-19 21:40:44 UTC</small>
+        <small style="color: var(--hint);">Made with Nim. Generated: 2026-08-21 14:28:00 UTC</small>
       </div>
     </div>
   </div>

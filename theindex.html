@@ -28,18 +28,22 @@
     <label for="nav-toggle" id="nav-overlay"></label>
     <div class="container">
       <h1 class="title">Index</h1>
-      Modules: <a href="mummy.html">mummy</a>, <a href="mummy/common.html">mummy/common</a>, <a href="mummy/internal.html">mummy/internal</a>, <a href="routers.html">routers</a>.<br/><p /><h2>API symbols</h2>
+      Modules: <a href="mummy.html">mummy</a>, <a href="mummy/common.html">mummy/common</a>, <a href="mummy/internal.html">mummy/internal</a>, <a href="routers.html">routers</a>, <a href="sse.html">sse</a>.<br/><p /><h2>API symbols</h2>
 <dl><dt><a name="%60%24%60" href="#%60%24%60"><span>`$`:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
           data-doc-search-tag="mummy: proc `$`(request: Request): string" href="mummy.html#%24%2CRequest">mummy: proc `$`(request: Request): string</a></li>
           <li><a class="reference external"
           data-doc-search-tag="mummy: proc `$`(stream: RequestBodyStream): string" href="mummy.html#%24%2CRequestBodyStream">mummy: proc `$`(stream: RequestBodyStream): string</a></li>
           <li><a class="reference external"
+          data-doc-search-tag="mummy: proc `$`(stream: ResponseBodyStream): string" href="mummy.html#%24%2CResponseBodyStream">mummy: proc `$`(stream: ResponseBodyStream): string</a></li>
+          <li><a class="reference external"
           data-doc-search-tag="mummy: proc `$`(websocket: WebSocket): string" href="mummy.html#%24%2CWebSocket">mummy: proc `$`(websocket: WebSocket): string</a></li>
           </ul></dd>
 <dt><a name="%60%3D%3D%60" href="#%60%3D%3D%60"><span>`==`:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
           data-doc-search-tag="mummy: proc `==`(a, b: RequestBodyStream): bool" href="mummy.html#%3D%3D%2CRequestBodyStream%2CRequestBodyStream">mummy: proc `==`(a, b: RequestBodyStream): bool</a></li>
+          <li><a class="reference external"
+          data-doc-search-tag="mummy: proc `==`(a, b: ResponseBodyStream): bool" href="mummy.html#%3D%3D%2CResponseBodyStream%2CResponseBodyStream">mummy: proc `==`(a, b: ResponseBodyStream): bool</a></li>
           </ul></dd>
 <dt><a name="%60%5B%5D%3D%60" href="#%60%5B%5D%3D%60"><span>`[]=`:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
@@ -69,6 +73,8 @@
           </ul></dd>
 <dt><a name="close" href="#close"><span>close:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
+          data-doc-search-tag="mummy: proc close(stream: ResponseBodyStream)" href="mummy.html#close%2CResponseBodyStream">mummy: proc close(stream: ResponseBodyStream)</a></li>
+          <li><a class="reference external"
           data-doc-search-tag="mummy: proc close(server: Server)" href="mummy.html#close%2CServer">mummy: proc close(server: Server)</a></li>
           <li><a class="reference external"
           data-doc-search-tag="mummy: proc close(websocket: WebSocket)" href="mummy.html#close%2CWebSocket">mummy: proc close(websocket: WebSocket)</a></li>
@@ -76,6 +82,10 @@
 <dt><a name="CloseEvent" href="#CloseEvent"><span>CloseEvent:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
           data-doc-search-tag="mummy: WebSocketEvent.CloseEvent" href="mummy.html#CloseEvent">mummy: WebSocketEvent.CloseEvent</a></li>
+          </ul></dd>
+<dt><a name="comment" href="#comment"><span>comment:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="sse: proc comment(stream: ResponseBodyStream; text: string): bool" href="sse.html#comment%2CResponseBodyStream%2Cstring">sse: proc comment(stream: ResponseBodyStream; text: string): bool</a></li>
           </ul></dd>
 <dt><a name="contains" href="#contains"><span>contains:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
@@ -94,6 +104,10 @@
           data-doc-search-tag="routers: proc delete(router: var Router; route: string | static string;
        handler: RequestHandler)" href="routers.html#delete%2CRouter%2C%2CRequestHandler">routers: proc delete(router: var Router; route: string | static string;
        handler: RequestHandler)</a></li>
+          </ul></dd>
+<dt><a name="encode" href="#encode"><span>encode:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="sse: proc encode(event: SseEvent): string" href="sse.html#encode%2CSseEvent">sse: proc encode(event: SseEvent): string</a></li>
           </ul></dd>
 <dt><a name="encodeFrameHeader" href="#encodeFrameHeader"><span>encodeFrameHeader:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
@@ -118,10 +132,16 @@
 <dt><a name="hash" href="#hash"><span>hash:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
           data-doc-search-tag="mummy: proc hash(stream: RequestBodyStream): Hash" href="mummy.html#hash%2CRequestBodyStream">mummy: proc hash(stream: RequestBodyStream): Hash</a></li>
+          <li><a class="reference external"
+          data-doc-search-tag="mummy: proc hash(stream: ResponseBodyStream): Hash" href="mummy.html#hash%2CResponseBodyStream">mummy: proc hash(stream: ResponseBodyStream): Hash</a></li>
           </ul></dd>
 <dt><a name="head" href="#head"><span>head:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
           data-doc-search-tag="routers: proc head(router: var Router; route: string | static string; handler: RequestHandler)" href="routers.html#head%2CRouter%2C%2CRequestHandler">routers: proc head(router: var Router; route: string | static string; handler: RequestHandler)</a></li>
+          </ul></dd>
+<dt><a name="heartbeat" href="#heartbeat"><span>heartbeat:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="sse: proc heartbeat(stream: ResponseBodyStream; comment = &quot;keep-alive&quot;): bool" href="sse.html#heartbeat%2CResponseBodyStream%2Cstring">sse: proc heartbeat(stream: ResponseBodyStream; comment = &quot;keep-alive&quot;): bool</a></li>
           </ul></dd>
 <dt><a name="Http10" href="#Http10"><span>Http10:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
@@ -158,12 +178,14 @@
           maxHeadersLen = 8 * 1024; maxBodyLen = 1024 * 1024;
           maxMessageLen = 64 * 1024; tcpNoDelay = true;
           requestBodyHandler: RequestBodyHandler = nil;
-          requestBodyChunkSize: Positive = 64 * 1024): Server" href="mummy.html#newServer%2CRequestHandler%2CWebSocketHandler%2CRequestBodyHandler%2CPositive">mummy: proc newServer(handler: RequestHandler; websocketHandler: WebSocketHandler = nil;
+          requestBodyChunkSize: Positive = 64 * 1024;
+          responseBodyHandler: ResponseBodyHandler = nil): Server" href="mummy.html#newServer%2CRequestHandler%2CWebSocketHandler%2CRequestBodyHandler%2CPositive%2CResponseBodyHandler">mummy: proc newServer(handler: RequestHandler; websocketHandler: WebSocketHandler = nil;
           workerThreads = max(countProcessors() * 10, 1);
           maxHeadersLen = 8 * 1024; maxBodyLen = 1024 * 1024;
           maxMessageLen = 64 * 1024; tcpNoDelay = true;
           requestBodyHandler: RequestBodyHandler = nil;
-          requestBodyChunkSize: Positive = 64 * 1024): Server</a></li>
+          requestBodyChunkSize: Positive = 64 * 1024;
+          responseBodyHandler: ResponseBodyHandler = nil): Server</a></li>
           </ul></dd>
 <dt><a name="OpenEvent" href="#OpenEvent"><span>OpenEvent:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
@@ -263,6 +285,46 @@
 <li><a class="reference external"
           data-doc-search-tag="mummy: proc responded(request: Request): bool" href="mummy.html#responded%2CRequest">mummy: proc responded(request: Request): bool</a></li>
           </ul></dd>
+<dt><a name="respondSse" href="#respondSse"><span>respondSse:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="sse: proc respondSse(request: Request; statusCode = 200;
+           headers: sink HttpHeaders = emptyHttpHeaders(); start = true): ResponseBodyStream" href="sse.html#respondSse%2CRequest%2Cint%2CsinkHttpHeaders">sse: proc respondSse(request: Request; statusCode = 200;
+           headers: sink HttpHeaders = emptyHttpHeaders(); start = true): ResponseBodyStream</a></li>
+          </ul></dd>
+<dt><a name="respondStream" href="#respondStream"><span>respondStream:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="mummy: proc respondStream(request: Request; statusCode = 200;
+              headers: sink HttpHeaders = emptyHttpHeaders(); start = true): ResponseBodyStream" href="mummy.html#respondStream%2CRequest%2Cint%2CsinkHttpHeaders">mummy: proc respondStream(request: Request; statusCode = 200;
+              headers: sink HttpHeaders = emptyHttpHeaders(); start = true): ResponseBodyStream</a></li>
+          </ul></dd>
+<dt><a name="ResponseBodyClosed" href="#ResponseBodyClosed"><span>ResponseBodyClosed:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="mummy: ResponseBodyEventKind.ResponseBodyClosed" href="mummy.html#ResponseBodyClosed">mummy: ResponseBodyEventKind.ResponseBodyClosed</a></li>
+          </ul></dd>
+<dt><a name="ResponseBodyError" href="#ResponseBodyError"><span>ResponseBodyError:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="mummy: ResponseBodyEventKind.ResponseBodyError" href="mummy.html#ResponseBodyError">mummy: ResponseBodyEventKind.ResponseBodyError</a></li>
+          </ul></dd>
+<dt><a name="ResponseBodyEventKind" href="#ResponseBodyEventKind"><span>ResponseBodyEventKind:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="mummy: enum ResponseBodyEventKind" href="mummy.html#ResponseBodyEventKind">mummy: enum ResponseBodyEventKind</a></li>
+          </ul></dd>
+<dt><a name="ResponseBodyHandler" href="#ResponseBodyHandler"><span>ResponseBodyHandler:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="mummy: type ResponseBodyHandler" href="mummy.html#ResponseBodyHandler">mummy: type ResponseBodyHandler</a></li>
+          </ul></dd>
+<dt><a name="ResponseBodyOpen" href="#ResponseBodyOpen"><span>ResponseBodyOpen:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="mummy: ResponseBodyEventKind.ResponseBodyOpen" href="mummy.html#ResponseBodyOpen">mummy: ResponseBodyEventKind.ResponseBodyOpen</a></li>
+          </ul></dd>
+<dt><a name="ResponseBodyStream" href="#ResponseBodyStream"><span>ResponseBodyStream:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="mummy: object ResponseBodyStream" href="mummy.html#ResponseBodyStream">mummy: object ResponseBodyStream</a></li>
+          </ul></dd>
+<dt><a name="ResponseBodyWritable" href="#ResponseBodyWritable"><span>ResponseBodyWritable:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="mummy: ResponseBodyEventKind.ResponseBodyWritable" href="mummy.html#ResponseBodyWritable">mummy: ResponseBodyEventKind.ResponseBodyWritable</a></li>
+          </ul></dd>
 <dt><a name="Router" href="#Router"><span>Router:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
           data-doc-search-tag="routers: object Router" href="routers.html#Router">routers: object Router</a></li>
@@ -270,6 +332,8 @@
 <dt><a name="send" href="#send"><span>send:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
           data-doc-search-tag="mummy: proc send(websocket: WebSocket; data: sink string; kind = TextMessage)" href="mummy.html#send%2CWebSocket%2Csinkstring">mummy: proc send(websocket: WebSocket; data: sink string; kind = TextMessage)</a></li>
+          <li><a class="reference external"
+          data-doc-search-tag="sse: proc send(stream: ResponseBodyStream; event: SseEvent): bool" href="sse.html#send%2CResponseBodyStream%2CSseEvent">sse: proc send(stream: ResponseBodyStream; event: SseEvent): bool</a></li>
           </ul></dd>
 <dt><a name="serve" href="#serve"><span>serve:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
@@ -280,6 +344,14 @@
 <dt><a name="Server" href="#Server"><span>Server:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
           data-doc-search-tag="mummy: type Server" href="mummy.html#Server">mummy: type Server</a></li>
+          </ul></dd>
+<dt><a name="SseEvent" href="#SseEvent"><span>SseEvent:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="sse: object SseEvent" href="sse.html#SseEvent">sse: object SseEvent</a></li>
+          </ul></dd>
+<dt><a name="start" href="#start"><span>start:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="mummy: proc start(stream: ResponseBodyStream)" href="mummy.html#start%2CResponseBodyStream">mummy: proc start(stream: ResponseBodyStream)</a></li>
           </ul></dd>
 <dt><a name="strictParseHex" href="#strictParseHex"><span>strictParseHex:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
@@ -327,11 +399,15 @@
 <li><a class="reference external"
           data-doc-search-tag="mummy: type WebSocketHandler" href="mummy.html#WebSocketHandler">mummy: type WebSocketHandler</a></li>
           </ul></dd>
+<dt><a name="write" href="#write"><span>write:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="mummy: proc write(stream: ResponseBodyStream; data: sink string): bool" href="mummy.html#write%2CResponseBodyStream%2Csinkstring">mummy: proc write(stream: ResponseBodyStream; data: sink string): bool</a></li>
+          </ul></dd>
 </dl>
       <div class="twelve-columns footer">
         <span class="nim-sprite"></span>
         <br>
-        <small style="color: var(--hint);">Made with Nim. Generated: 2026-08-19 21:40:44 UTC</small>
+        <small style="color: var(--hint);">Made with Nim. Generated: 2026-08-21 14:28:00 UTC</small>
       </div>
     </div>
   </div>
