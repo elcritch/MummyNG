@@ -1,6 +1,9 @@
 ## Server-sent events built on Mummy's bounded response body streams.
 
-import std/[options, strutils]
+import std/options
+
+import sse/types as sseTypes
+import sse/writer as sseWriter
 
 import ../mummy
 
@@ -9,7 +12,7 @@ export options
 type
   SseEvent* = object
     ## A semantic server-sent event.
-    data*: string ## Event payload; each input line becomes one `data` field.
+    data*: string ## Event payload; an empty payload emits an empty `data` field.
     event*: string ## Optional event type; CR and LF are invalid.
     id*: string ## Optional last-event ID; CR, LF, and NUL are invalid.
     retry*: Option[Natural] ## Optional reconnection delay in milliseconds.
@@ -21,20 +24,6 @@ proc isFieldValue(value: string, allowNull = true): bool {.raises: [].} =
       return false
   result = true
 
-proc appendLines(result: var string, prefix, value: string) {.raises: [].} =
-  var start: int
-  while true:
-    let ending = value.find('\n', start)
-    if ending < 0:
-      result.add(prefix)
-      result.add(value[start..^1])
-      result.add("\n")
-      return
-    result.add(prefix)
-    result.add(value[start..<ending])
-    result.add("\n")
-    start = ending + 1
-
 proc encode*(event: SseEvent): string {.raises: [].} =
   ## Encodes an event using the SSE wire format.
   ##
@@ -42,19 +31,18 @@ proc encode*(event: SseEvent): string {.raises: [].} =
   if not event.event.isFieldValue() or not event.id.isFieldValue(allowNull = false):
     return
   if event.comment.len > 0:
-    result.appendLines(": ", event.comment.replace("\r\n", "\n").replace('\r', '\n'))
-  if event.id.len > 0:
-    result.add("id: " & event.id & "\n")
-  if event.event.len > 0:
-    result.add("event: " & event.event & "\n")
+    result.add(sseWriter.serializeComment(event.comment))
   if event.retry.isSome:
-    result.add("retry: " & $event.retry.get() & "\n")
-  if event.data.len > 0 or result.len == 0:
-    result.appendLines(
-      "data: ",
-      event.data.replace("\r\n", "\n").replace('\r', '\n')
-    )
-  result.add("\n")
+    result.add(sseWriter.serializeRetry(event.retry.get().int))
+  if event.data.len > 0 or event.event.len > 0 or event.id.len > 0 or
+      result.len == 0:
+    result.add(sseWriter.serializeEvent(sseTypes.SseEvent(
+      data: event.data,
+      eventType: event.event,
+      lastEventId: event.id
+    )))
+  else:
+    result.add("\n")
 
 proc respondSse*(
   request: Request,
@@ -81,8 +69,7 @@ proc send*(stream: ResponseBodyStream, event: SseEvent): bool {.raises: [], gcsa
 
 proc comment*(stream: ResponseBodyStream, text: string): bool {.raises: [], gcsafe.} =
   ## Attempts to send an SSE comment when the stream is writable.
-  var encoded: string
-  encoded.appendLines(": ", text.replace("\r\n", "\n").replace('\r', '\n'))
+  var encoded = sseWriter.serializeComment(text)
   encoded.add("\n")
   stream.write(move encoded)
 

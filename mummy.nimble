@@ -10,6 +10,7 @@ requires "zippy >= 0.10.9"
 requires "webby >= 0.2.1"
 requires "crunchy >= 0.1.11"
 requires "chroniclers >= 0.3.0"
+requires "https://github.com/Niminem/sse#33aa15a"
 
 feature "chronicles":
   requires "chroniclers[chronicles] >= 0.3.0"

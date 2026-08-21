@@ -226,7 +226,7 @@ proc requesterProc() {.thread, gcsafe.} =
     doAssert "Cache-Control: no-cache" in response
     doAssert "X-Accel-Buffering: no" in response
     doAssert "Content-Encoding" notin response
-    doAssert "id: 1\nevent: ready\nretry: 0\ndata: hello\n\n" in response
+    doAssert "retry: 0\nevent: ready\nid: 1\ndata: hello\n\n" in response
     doAssert ": ping\n\n" in response
     waitFor(closedMode, 5)
     doAssert sseStep.load(moRelaxed) == 3
