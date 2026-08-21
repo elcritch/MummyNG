@@ -49,6 +49,14 @@ jobs:
         --out:${{ env.DEPLOY_DIR }}/
         src/mummy/routers.nim
 
+    - name: Generate SSE documentation
+      run: >-
+        nim doc --index:on
+        --git.url:https://github.com/${{ github.repository }}
+        --git.commit:master
+        --out:${{ env.DEPLOY_DIR }}/
+        src/mummy/sse.nim
+
     - name: Generate project documentation
       run: >-
         nim doc --index:on --project

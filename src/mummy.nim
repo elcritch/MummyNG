@@ -81,6 +81,12 @@ type
     clientId: uint64
     streamId: uint64
 
+  ResponseBodyStream* = object ## Identifies one outgoing response body stream.
+    server: Server
+    clientSocket: SocketHandle
+    clientId: uint64
+    streamId: uint64
+
   Message* = object
     kind*: MessageKind
     data*: string
@@ -95,6 +101,12 @@ type
     kind*: RequestBodyEventKind ## The lifecycle event kind.
     data*: string ## Decoded body bytes for `RequestBodyChunk`; empty otherwise.
     bytesReceived*: int ## Cumulative decoded bytes delivered through chunk events.
+
+  ResponseBodyEventKind* = enum ## Outgoing response body lifecycle event kinds.
+    ResponseBodyOpen ## The headers are attached and the stream can accept a write.
+    ResponseBodyWritable ## The previously accepted body chunk has been fully sent.
+    ResponseBodyError ## The handler or transport failed; no more writes are accepted.
+    ResponseBodyClosed ## The stream is closed and its application state can be released.
 
   MessageKind* = enum
     TextMessage, BinaryMessage, Ping, Pong
@@ -124,6 +136,16 @@ type
     ## bounded chunk. `RequestBodyError` is terminal and allows sinks to clean up
     ## after a disconnect, protocol error, or server shutdown.
 
+  ResponseBodyHandler* = proc(
+    stream: ResponseBodyStream,
+    event: ResponseBodyEventKind
+  ) {.gcsafe.}
+    ## Handles serialized outgoing response body lifecycle events on workers.
+    ## `ResponseBodyOpen` is emitted after response headers attach to a live
+    ## connection. Call `write` once during Open or Writable; the next Writable
+    ## arrives only after that chunk has been fully sent. Error and Closed are
+    ## terminal, in that order when a transport failure occurs.
+
   RequestBodyDecision = enum
     BodyUndecided, BodyBuffered, BodyStreamed, BodyRejected
 
@@ -143,6 +165,20 @@ type
     cond: Cond
     states: Table[RequestBodyStream, RequestBodyState]
 
+  ResponseBodyUpdate = object
+    event: ResponseBodyEventKind
+
+  ResponseBodyState = object
+    updates: Deque[ResponseBodyUpdate]
+    response: OutgoingBuffer
+    chunked, closeConnection: bool
+    claimed, started, opened, writable, closeQueued, closed, errorQueued: bool
+
+  ResponseBodyStore = object
+    lock: Lock
+    cond: Cond
+    states: Table[ResponseBodyStream, ResponseBodyState]
+
   RequestBodyControlKind = enum
     BodyDecisionReady, BodyChunkHandled, BodyHandlerFinished
 
@@ -155,13 +191,15 @@ type
     handler: RequestHandler
     websocketHandler: WebSocketHandler
     requestBodyHandler: RequestBodyHandler
+    responseBodyHandler: ResponseBodyHandler
     maxHeadersLen, maxBodyLen, maxMessageLen, requestBodyChunkSize: int
     tcpNoDelay: bool
     rand: Rand
     nextRequestBodyStreamId: uint64
+    nextResponseBodyStreamId: uint64
     workerThreads: seq[Thread[Server]]
     serving: Atomic[bool]
-    destroyCalled, finishingRequestBodies: bool
+    destroyCalled, finishingBodyStreams: bool
     listeningSockets: seq[SocketHandle]
     selector: Selector[DataEntry]
     responseQueued, sendQueued, requestBodyControlQueued, shutdown: SelectEvent
@@ -178,6 +216,7 @@ type
     requestBodyControlQueue: Deque[RequestBodyControl]
     requestBodyControlQueueLock: Lock
     requestBodies: RequestBodyStore
+    responseBodies: ResponseBodyStore
     websocketClaimed: Table[WebSocket, bool]
     websocketQueues: Table[WebSocket, Deque[WebSocketUpdate]]
     websocketQueuesLock: Lock
@@ -188,6 +227,7 @@ type
     request: Request
     websocket: WebSocket
     requestBody: RequestBodyStream
+    responseBody: ResponseBodyStream
 
   DataEntryKind = enum
     ServerSocketEntry, ClientSocketEntry, EventEntry
@@ -210,6 +250,7 @@ type
       upgradedToWebSocket, closeFrameSent: bool
       sendsWaitingForUpgrade: seq[OutgoingBuffer]
       readPaused, closeAfterResponse: bool
+      responseBody: ResponseBodyStream
       requestCounter: int # Incoming request incs, outgoing response decs
 
   IncomingBodyMode = enum
@@ -243,8 +284,11 @@ type
     clientSocket: SocketHandle
     clientId: uint64
     closeConnection, isWebSocketUpgrade, isCloseFrame: bool
+    isResponseBodyOpen: bool
+    responseBodyCompletion: ResponseBodyEventKind
     buffer1, buffer2: string
     bytesSent: int
+    responseBody: ResponseBodyStream
 
   WebSocketUpdate = object
     event: WebSocketEvent
@@ -280,6 +324,22 @@ proc hash*(stream: RequestBodyStream): Hash {.raises: [].} =
 proc `$`*(stream: RequestBodyStream): string {.raises: [].} =
   ## Returns a diagnostic representation of an incoming request body stream.
   "RequestBodyStream " & $cast[uint](hash(stream))
+
+proc `==`*(a, b: ResponseBodyStream): bool {.raises: [].} =
+  ## Returns whether two handles identify the same outgoing response body.
+  a.server == b.server and a.clientSocket == b.clientSocket and
+    a.clientId == b.clientId and a.streamId == b.streamId
+
+proc hash*(stream: ResponseBodyStream): Hash {.raises: [].} =
+  ## Returns a hash suitable for using a response body stream as a table key.
+  result = hash(cast[uint](stream.server))
+  result = result !& hash(stream.clientSocket)
+  result = result !& hash(stream.clientId)
+  result = !$ (result !& hash(stream.streamId))
+
+proc `$`*(stream: ResponseBodyStream): string {.raises: [].} =
+  ## Returns a diagnostic representation of an outgoing response body stream.
+  "ResponseBodyStream " & $cast[uint](hash(stream))
 
 proc chooseRequestBody(
   stream: RequestBodyStream,
@@ -569,6 +629,188 @@ proc respond*(
   if queueWasEmpty:
     triggerEvent(request.server.responseQueued)
 
+proc removeHeader(headers: var HttpHeaders, key: string) {.raises: [].} =
+  var i: int
+  while i < headers.len:
+    if cmpIgnoreCase(headers.toBase[i][0], key) == 0:
+      headers.toBase.delete(i)
+    else:
+      inc i
+
+proc close*(stream: ResponseBodyStream) {.raises: [], gcsafe.}
+
+proc start*(stream: ResponseBodyStream) {.raises: [], gcsafe.} =
+  ## Starts a response body stream created with `respondStream(..., start = false)`.
+  ## Calling this more than once has no effect.
+  if stream.server == nil:
+    return
+  var response: OutgoingBuffer
+  withLock stream.server.responseBodies.lock:
+    try:
+      let state = addr stream.server.responseBodies.states[stream]
+      if state.started or state.closed:
+        return
+      state.started = true
+      response = state.response
+    except KeyError:
+      return
+  var queueWasEmpty: bool
+  withLock stream.server.responseQueueLock:
+    queueWasEmpty = stream.server.responseQueue.len == 0
+    stream.server.responseQueue.addLast(response)
+  if queueWasEmpty:
+    triggerEvent(stream.server.responseQueued)
+
+proc respondStream*(
+  request: Request,
+  statusCode = 200,
+  headers: sink HttpHeaders = emptyHttpHeaders(),
+  start = true
+): ResponseBodyStream {.raises: [], gcsafe.} =
+  ## Creates a bounded, backpressured streaming response body.
+  ##
+  ## HTTP/1.1 responses use chunked framing; HTTP/1.0 responses close after the
+  ## final body bytes. HEAD and bodyless status responses are sent normally and
+  ## return an invalid handle, so `write` safely returns false.
+  ##
+  ## Pass `start = false` when application state must be associated with the
+  ## returned handle before `ResponseBodyOpen` can run, then call `start`.
+  if request == nil or request.server == nil:
+    return
+  if request.responded:
+    logSafely:
+      info "Ignoring streaming response after a final response",
+        request = $request
+    return
+  if request.httpMethod == "HEAD" or statusCode < 200 or statusCode == 204 or
+      statusCode == 304:
+    headers.removeHeader("Content-Length")
+    headers.removeHeader("Transfer-Encoding")
+    request.respond(statusCode, move headers)
+    return
+
+  var streamId: uint64
+  withLock request.server.responseBodies.lock:
+    inc request.server.nextResponseBodyStreamId
+    if request.server.nextResponseBodyStreamId == 0:
+      inc request.server.nextResponseBodyStreamId
+    streamId = request.server.nextResponseBodyStreamId
+  result = ResponseBodyStream(
+    server: request.server,
+    clientSocket: request.clientSocket,
+    clientId: request.clientId,
+    streamId: streamId
+  )
+  let chunked = request.httpVersion != Http10
+  var response = OutgoingBuffer(
+    clientSocket: request.clientSocket,
+    clientId: request.clientId,
+    isResponseBodyOpen: true,
+    responseBody: result
+  )
+  var closeAfterStream = request.httpVersion == Http10
+  if request.headers.headerContainsToken("Connection", "close"):
+    closeAfterStream = true
+  elif request.headers.headerContainsToken("Connection", "keep-alive"):
+    closeAfterStream = false
+  if not closeAfterStream:
+    closeAfterStream = headers.headerContainsToken("Connection", "close")
+  headers.removeHeader("Content-Length")
+  headers.removeHeader("Transfer-Encoding")
+  if chunked:
+    headers["Transfer-Encoding"] = "chunked"
+  else:
+    closeAfterStream = true
+  if closeAfterStream:
+    headers["Connection"] = "close"
+  elif request.httpVersion == Http10:
+    headers["Connection"] = "keep-alive"
+  response.buffer1 = encodeHeaders(statusCode, headers)
+  request.responded = true
+  withLock request.server.responseBodies.lock:
+    request.server.responseBodies.states[result] = ResponseBodyState(
+      updates: initDeque[ResponseBodyUpdate](),
+      response: response,
+      chunked: chunked,
+      closeConnection: closeAfterStream
+    )
+  if start:
+    result.start()
+
+proc write*(stream: ResponseBodyStream, data: sink string): bool {.raises: [], gcsafe.} =
+  ## Queues one body chunk when the stream is Open or Writable.
+  ##
+  ## Returns false when another chunk is pending or the stream is not writable.
+  ## An empty string is an accepted no-op and does not consume writability.
+  if stream.server == nil:
+    return false
+  var chunked: bool
+  withLock stream.server.responseBodies.lock:
+    try:
+      let state = addr stream.server.responseBodies.states[stream]
+      if not state.started or not state.writable or state.closeQueued or state.closed:
+        return false
+      if data.len == 0:
+        return true
+      state.writable = false
+      chunked = state.chunked
+    except KeyError:
+      return false
+  var chunk = OutgoingBuffer(
+    clientSocket: stream.clientSocket,
+    clientId: stream.clientId,
+    responseBody: stream,
+    responseBodyCompletion: ResponseBodyWritable
+  )
+  if chunked:
+    chunk.buffer1 = toHexWithoutLeadingZeroes(data.len) & "\r\n"
+    data.add("\r\n")
+    chunk.buffer2 = move data
+  else:
+    chunk.buffer1 = move data
+  var queueWasEmpty: bool
+  withLock stream.server.sendQueueLock:
+    queueWasEmpty = stream.server.sendQueue.len == 0
+    stream.server.sendQueue.addLast(move chunk)
+  if queueWasEmpty:
+    triggerEvent(stream.server.sendQueued)
+  result = true
+
+proc close*(stream: ResponseBodyStream) {.raises: [], gcsafe.} =
+  ## Idempotently finishes a response body stream after its accepted chunk.
+  ## This can also be called before `start`; closing is then deferred until the
+  ## response headers are attached.
+  if stream.server == nil:
+    return
+  var chunked, closeConnection: bool
+  withLock stream.server.responseBodies.lock:
+    try:
+      let state = addr stream.server.responseBodies.states[stream]
+      if state.closeQueued or state.closed:
+        return
+      state.closeQueued = true
+      state.writable = false
+      if not state.opened:
+        return
+      chunked = state.chunked
+      closeConnection = state.closeConnection
+    except KeyError:
+      return
+  let closeBuffer = OutgoingBuffer(
+    clientSocket: stream.clientSocket,
+    clientId: stream.clientId,
+    closeConnection: closeConnection,
+    buffer1: if chunked: "0\r\n\r\n" else: "",
+    responseBody: stream,
+    responseBodyCompletion: ResponseBodyClosed
+  )
+  var queueWasEmpty: bool
+  withLock stream.server.sendQueueLock:
+    queueWasEmpty = stream.server.sendQueue.len == 0
+    stream.server.sendQueue.addLast(closeBuffer)
+  if queueWasEmpty:
+    triggerEvent(stream.server.sendQueued)
+
 proc reject*(
   stream: RequestBodyStream,
   statusCode = 413,
@@ -642,6 +884,13 @@ proc upgradeToWebSocket*(
   request.respond(101, headers)
 
 proc postTask(server: Server, task: WorkerTask) {.raises: [], gcsafe.}
+proc popResponseBodyUpdate(
+  server: Server,
+  stream: ResponseBodyStream,
+  update: var ResponseBodyUpdate
+): bool {.raises: [], gcsafe.}
+proc finishResponseBody(stream: ResponseBodyStream, error: bool) {.raises: [], gcsafe.}
+proc abortResponseBody(stream: ResponseBodyStream) {.raises: [], gcsafe.}
 
 proc addRequestBodyState(
   server: Server,
@@ -761,7 +1010,7 @@ proc destroyRequest(request: Request) {.raises: [].} =
     `=destroy`(request[])
     deallocShared(request)
 
-proc workerProc(server: Server) {.raises: [].} =
+proc workerProc(server: Server) {.raises: [], gcsafe.} =
   # The worker threads run the task queue here
   let server = server
 
@@ -818,6 +1067,32 @@ proc workerProc(server: Server) {.raises: [].} =
               stackTrace = e.getStackTrace()
 
         if update.get.event == CloseEvent:
+          break
+    elif task.responseBody.server != nil:
+      while true:
+        var update: ResponseBodyUpdate
+        if not server.popResponseBodyUpdate(task.responseBody, update):
+          break
+        let event = update.event
+        var handlerFailed: bool
+        if server.responseBodyHandler != nil:
+          try:
+            server.responseBodyHandler(task.responseBody, event)
+          except Exception as e:
+            handlerFailed = true
+            logSafely:
+              error "Response body handler exception",
+                stream = $task.responseBody,
+                event = event,
+                exception = e.msg,
+                stackTrace = e.getStackTrace()
+        if handlerFailed and event != ResponseBodyClosed:
+          task.responseBody.abortResponseBody()
+        if event == ResponseBodyClosed:
+          withLock server.responseBodies.lock:
+            if task.responseBody in server.responseBodies.states:
+              server.responseBodies.states.del(task.responseBody)
+              broadcast(server.responseBodies.cond)
           break
     else:
       while true:
@@ -897,7 +1172,7 @@ proc workerProc(server: Server) {.raises: [].} =
       return
 
     let task = server.taskQueue.popFirst()
-    let skipDuringShutdown = server.finishingRequestBodies and
+    let skipDuringShutdown = server.finishingBodyStreams and
       (task.request != nil or task.websocket.server != nil)
     release(server.taskQueueLock)
 
@@ -917,6 +1192,91 @@ proc postTask(server: Server, task: WorkerTask) {.raises: [], gcsafe.} =
   withLock server.taskQueueLock:
     server.taskQueue.addLast(task)
   signal(server.taskQueueCond)
+
+proc postResponseBodyUpdate(
+  stream: ResponseBodyStream,
+  event: ResponseBodyEventKind,
+  urgent = false
+) {.raises: [], gcsafe.} =
+  if stream.server == nil:
+    return
+  var needsTask: bool
+  withLock stream.server.responseBodies.lock:
+    try:
+      let state = addr stream.server.responseBodies.states[stream]
+      if state.closed:
+        return
+      if event == ResponseBodyError:
+        if state.errorQueued:
+          return
+        state.errorQueued = true
+      if event == ResponseBodyClosed:
+        state.closed = true
+      state.updates.addLast(ResponseBodyUpdate(event: event))
+      if not state.claimed:
+        state.claimed = true
+        needsTask = true
+    except KeyError:
+      discard
+  if needsTask:
+    if urgent:
+      withLock stream.server.taskQueueLock:
+        stream.server.taskQueue.addFirst(WorkerTask(responseBody: stream))
+      signal(stream.server.taskQueueCond)
+    else:
+      stream.server.postTask(WorkerTask(responseBody: stream))
+
+proc popResponseBodyUpdate(
+  server: Server,
+  stream: ResponseBodyStream,
+  update: var ResponseBodyUpdate
+): bool {.raises: [], gcsafe.} =
+  withLock server.responseBodies.lock:
+    try:
+      let state = addr server.responseBodies.states[stream]
+      if state.updates.len > 0:
+        update = state.updates.popFirst()
+        return true
+      state.claimed = false
+    except KeyError:
+      discard
+
+proc finishResponseBody(stream: ResponseBodyStream, error: bool) {.raises: [], gcsafe.} =
+  if stream.server == nil:
+    return
+  if error:
+    stream.postResponseBodyUpdate(ResponseBodyError, urgent = true)
+  stream.postResponseBodyUpdate(ResponseBodyClosed, urgent = true)
+
+proc abortResponseBody(stream: ResponseBodyStream) {.raises: [], gcsafe.} =
+  ## Forces transport teardown after a response body handler failure.
+  if stream.server == nil:
+    return
+  var queueClose: bool
+  withLock stream.server.responseBodies.lock:
+    try:
+      let state = addr stream.server.responseBodies.states[stream]
+      if not state.closeQueued:
+        state.closeQueued = true
+        state.writable = false
+        queueClose = state.started
+    except KeyError:
+      discard
+  if queueClose:
+    let closeBuffer = OutgoingBuffer(
+      clientSocket: stream.clientSocket,
+      clientId: stream.clientId,
+      closeConnection: true,
+      responseBody: stream,
+      responseBodyCompletion: ResponseBodyClosed
+    )
+    var queueWasEmpty: bool
+    withLock stream.server.sendQueueLock:
+      queueWasEmpty = stream.server.sendQueue.len == 0
+      stream.server.sendQueue.addLast(closeBuffer)
+    if queueWasEmpty:
+      triggerEvent(stream.server.sendQueued)
+  stream.finishResponseBody(true)
 
 proc postWebSocketUpdate(
   websocket: WebSocket,
@@ -1660,15 +2020,37 @@ proc afterSend(
   clientSocket: SocketHandle,
   dataEntry: DataEntry
 ): bool {.raises: [IOSelectorsException].} =
-  let
-    outgoingBuffer = dataEntry.outgoingBuffers.peekFirst()
-    totalBytes = outgoingBuffer.buffer1.len + outgoingBuffer.buffer2.len
-  if outgoingBuffer.bytesSent == totalBytes:
+  while dataEntry.outgoingBuffers.len > 0:
+    let
+      outgoingBuffer = dataEntry.outgoingBuffers.peekFirst()
+      totalBytes = outgoingBuffer.buffer1.len + outgoingBuffer.buffer2.len
+    if outgoingBuffer.bytesSent != totalBytes:
+      break
+
     # The current outgoing buffer for this socket has been fully sent
     # Remove it from the outgoing buffer queue
     dataEntry.outgoingBuffers.shrink(fromFirst = 1)
     if outgoingBuffer.isCloseFrame:
       dataEntry.closeFrameSent = true
+    if outgoingBuffer.responseBody.server != nil:
+      case outgoingBuffer.responseBodyCompletion
+      of ResponseBodyWritable:
+        var becameWritable: bool
+        withLock server.responseBodies.lock:
+          try:
+            let state = addr server.responseBodies.states[outgoingBuffer.responseBody]
+            if not state.closeQueued and not state.closed:
+              state.writable = true
+              becameWritable = true
+          except KeyError:
+            discard
+        if becameWritable:
+          outgoingBuffer.responseBody.postResponseBodyUpdate(ResponseBodyWritable)
+      of ResponseBodyClosed:
+        dataEntry.responseBody = ResponseBodyStream()
+        outgoingBuffer.responseBody.finishResponseBody(false)
+      else:
+        discard
     if outgoingBuffer.closeConnection:
       return true
   # If we don't have any more outgoing buffers, update the selector
@@ -1753,16 +2135,34 @@ proc abortRequestBodies(server: Server) {.raises: [], gcsafe.} =
     wait(server.requestBodies.cond, server.requestBodies.lock)
   release(server.requestBodies.lock)
 
+proc abortResponseBodies(server: Server) {.raises: [], gcsafe.} =
+  var streams: seq[ResponseBodyStream]
+  withLock server.responseBodies.lock:
+    for stream in server.responseBodies.states.keys:
+      streams.add(stream)
+  if server.workerThreads.len == 0:
+    withLock server.responseBodies.lock:
+      server.responseBodies.states.clear()
+      broadcast(server.responseBodies.cond)
+    return
+  for stream in streams:
+    stream.finishResponseBody(true)
+  acquire(server.responseBodies.lock)
+  while server.responseBodies.states.len > 0:
+    wait(server.responseBodies.cond, server.responseBodies.lock)
+  release(server.responseBodies.lock)
+
 proc destroy(server: Server, joinThreads: bool) {.raises: [], gcsafe.} =
   if joinThreads:
     withLock server.taskQueueLock:
-      server.finishingRequestBodies = true
+      server.finishingBodyStreams = true
   for listeningSocket in server.listeningSockets:
     listeningSocket.close()
   for clientSocket in server.clientSockets:
     clientSocket.close()
   if joinThreads:
     server.abortRequestBodies()
+    server.abortResponseBodies()
   withLock server.taskQueueLock:
     server.destroyCalled = true
   if server.selector != nil:
@@ -1780,6 +2180,8 @@ proc destroy(server: Server, joinThreads: bool) {.raises: [], gcsafe.} =
     deinitLock(server.requestBodyControlQueueLock)
     deinitLock(server.requestBodies.lock)
     deinitCond(server.requestBodies.cond)
+    deinitLock(server.responseBodies.lock)
+    deinitCond(server.responseBodies.cond)
     deinitLock(server.websocketQueuesLock)
     if server.responseQueuedInitialized:
       try:
@@ -1881,6 +2283,37 @@ proc loopForever(server: Server) {.raises: [OSError, IOSelectorsException].} =
             clientDataEntry.requestCounter =
               max(clientDataEntry.requestCounter - 1, 0)
 
+            if encodedResponse.isResponseBodyOpen:
+              var
+                streamOpened: bool
+                closeOnOpen: bool
+                chunked: bool
+                closeConnection: bool
+              withLock server.responseBodies.lock:
+                try:
+                  let state = addr server.responseBodies.states[encodedResponse.responseBody]
+                  if not state.closed:
+                    state.opened = true
+                    closeOnOpen = state.closeQueued
+                    state.writable = not closeOnOpen
+                    chunked = state.chunked
+                    closeConnection = state.closeConnection
+                    streamOpened = true
+                except KeyError:
+                  discard
+              if streamOpened:
+                clientDataEntry.responseBody = encodedResponse.responseBody
+                encodedResponse.responseBody.postResponseBodyUpdate(ResponseBodyOpen)
+                if closeOnOpen:
+                  clientDataEntry.outgoingBuffers.addLast(OutgoingBuffer(
+                    clientSocket: encodedResponse.clientSocket,
+                    clientId: encodedResponse.clientId,
+                    closeConnection: closeConnection,
+                    buffer1: if chunked: "0\r\n\r\n" else: "",
+                    responseBody: encodedResponse.responseBody,
+                    responseBodyCompletion: ResponseBodyClosed
+                  ))
+
             if encodedResponse.isWebSocketUpgrade:
               clientDataEntry.upgradedToWebSocket = true
               let websocket = WebSocket(
@@ -1906,12 +2339,16 @@ proc loopForever(server: Server) {.raises: [OSError, IOSelectorsException].} =
                       clientDataEntry.closeFrameQueuedAt = epochTime()
                 clientDataEntry.sendsWaitingForUpgrade.setLen(0)
           else:
+            if encodedResponse.responseBody.server != nil:
+              encodedResponse.responseBody.finishResponseBody(true)
             # Was this file descriptor reused for a different client?
             logSafely:
               debug "Dropped response",
                 reason = "client disconnected",
                 clientSocket = cast[uint](encodedResponse.clientSocket)
         else:
+          if encodedResponse.responseBody.server != nil:
+            encodedResponse.responseBody.finishResponseBody(true)
           logSafely:
             debug "Dropped response",
               reason = "client disconnected",
@@ -1930,8 +2367,14 @@ proc loopForever(server: Server) {.raises: [OSError, IOSelectorsException].} =
           let clientDataEntry =
             server.selector.getData(encodedFrame.clientSocket)
           if encodedFrame.clientId == clientDataEntry.clientId:
+            if encodedFrame.responseBody.server != nil:
+              if clientDataEntry.responseBody == encodedFrame.responseBody:
+                clientDataEntry.outgoingBuffers.addLast(encodedFrame)
+                server.updateClientEvents(encodedFrame.clientSocket, clientDataEntry)
+              else:
+                encodedFrame.responseBody.finishResponseBody(true)
             # Have we sent the upgrade response yet?
-            if clientDataEntry.upgradedToWebSocket:
+            elif clientDataEntry.upgradedToWebSocket:
               if clientDataEntry.closeFrameQueuedAt > 0:
                 logSafely:
                   debug "Dropped WebSocket message",
@@ -1949,12 +2392,16 @@ proc loopForever(server: Server) {.raises: [OSError, IOSelectorsException].} =
               # If we haven't, queue this to wait for the upgrade response
               clientDataEntry.sendsWaitingForUpgrade.add(encodedFrame)
           else:
+            if encodedFrame.responseBody.server != nil:
+              encodedFrame.responseBody.finishResponseBody(true)
             # Was this file descriptor reused for a different client?
             logSafely:
               debug "Dropped WebSocket message",
                 reason = "client disconnected",
                 clientSocket = cast[uint](encodedFrame.clientSocket)
         else:
+          if encodedFrame.responseBody.server != nil:
+            encodedFrame.responseBody.finishResponseBody(true)
           logSafely:
             debug "Dropped WebSocket message",
               reason = "client disconnected",
@@ -2024,7 +2471,11 @@ proc loopForever(server: Server) {.raises: [OSError, IOSelectorsException].} =
         if Write in readyKey.events:
           let
             outgoingBuffer = dataEntry.outgoingBuffers.peekFirst()
-            bytesSent =
+            totalBytes = outgoingBuffer.buffer1.len + outgoingBuffer.buffer2.len
+          if outgoingBuffer.bytesSent == totalBytes:
+            sentTo.add(readyKey.fd.SocketHandle)
+          else:
+            let bytesSent =
               if outgoingBuffer.bytesSent < outgoingBuffer.buffer1.len:
                 readyKey.fd.SocketHandle.send(
                   outgoingBuffer.buffer1[outgoingBuffer.bytesSent].addr,
@@ -2039,12 +2490,12 @@ proc loopForever(server: Server) {.raises: [OSError, IOSelectorsException].} =
                   (outgoingBuffer.buffer2.len - buffer2Pos).cint,
                   when defined(MSG_NOSIGNAL): MSG_NOSIGNAL else: 0
                 )
-          if bytesSent > 0:
-            outgoingBuffer.bytesSent += bytesSent
-            sentTo.add(readyKey.fd.SocketHandle)
-          else:
-            needClosing.incl(readyKey.fd.SocketHandle)
-            continue
+            if bytesSent > 0:
+              outgoingBuffer.bytesSent += bytesSent
+              sentTo.add(readyKey.fd.SocketHandle)
+            else:
+              needClosing.incl(readyKey.fd.SocketHandle)
+              continue
 
     for clientSocket in receivedFrom:
       if clientSocket in needClosing:
@@ -2093,12 +2544,14 @@ proc loopForever(server: Server) {.raises: [OSError, IOSelectorsException].} =
           RequestBodyUpdate(event: RequestBodyEvent(kind: RequestBodyError)),
           urgent = true
         )
+      if dataEntry.responseBody.server != nil:
+        dataEntry.responseBody.finishResponseBody(true)
 
 proc close*(server: Server) {.raises: [], gcsafe.} =
   ## Cleanly stops and deallocates the server.
-  ## In-flight handler calls are allowed to finish. Active request body streams
-  ## receive their terminal event so handlers can release resources. No queued
-  ## ordinary request or WebSocket handler calls are newly dispatched.
+  ## In-flight handler calls are allowed to finish. Active request and response
+  ## body streams receive terminal events so handlers can release resources. No
+  ## queued ordinary request or WebSocket handler calls are newly dispatched.
   if server.listeningSockets.len > 0:
     triggerEvent(server.shutdown)
   else:
@@ -2227,7 +2680,8 @@ proc newServer*(
   maxMessageLen = 64 * 1024, # 64 KB
   tcpNoDelay = true,
   requestBodyHandler: RequestBodyHandler = nil,
-  requestBodyChunkSize: Positive = 64 * 1024 # 64 KB
+  requestBodyChunkSize: Positive = 64 * 1024, # 64 KB
+  responseBodyHandler: ResponseBodyHandler = nil
 ): Server {.raises: [MummyError].} =
   ## Creates a new HTTP server. The request handler will be called for incoming
   ## HTTP requests. The WebSocket handler will be called for WebSocket events.
@@ -2237,6 +2691,8 @@ proc newServer*(
   ## be buffered and passed to the ordinary request handler. Request body calls
   ## are serialized per stream and their chunks are at most
   ## `requestBodyChunkSize` bytes.
+  ## `responseBodyHandler`, when set, receives serialized lifecycle events for
+  ## response streams created with `respondStream`.
   ## WebSocket events are dispatched serially per connection. This means your
   ## WebSocket handler must return from a call before the next call will be
   ## dispatched for the same connection.
@@ -2252,6 +2708,7 @@ proc newServer*(
   result.handler = handler
   result.websocketHandler = websocketHandler
   result.requestBodyHandler = requestBodyHandler
+  result.responseBodyHandler = responseBodyHandler
   result.maxHeadersLen = maxHeadersLen
   result.maxBodyLen = maxBodyLen
   result.maxMessageLen = maxMessageLen
@@ -2268,6 +2725,8 @@ proc newServer*(
   initLock(result.requestBodyControlQueueLock)
   initLock(result.requestBodies.lock)
   initCond(result.requestBodies.cond)
+  initLock(result.responseBodies.lock)
+  initCond(result.responseBodies.cond)
   initLock(result.websocketQueuesLock)
 
   # Stuff that can fail

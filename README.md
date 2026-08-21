@@ -170,6 +170,29 @@ it can also feed object storage, hashing, decompression, parsers, or other
 application-defined sinks. A higher-level temporary-file sink can be layered on
 top without changing the core API.
 
+## Streaming responses and server-sent events
+
+`respondStream` provides bounded-memory outgoing bodies. Pass a
+`responseBodyHandler` to `newServer`; it receives `ResponseBodyOpen` once the
+headers are attached, then `ResponseBodyWritable` after each fully transmitted
+chunk. Call `write` at most once per Open/Writable event and `close` when done.
+The terminal `ResponseBodyError` and `ResponseBodyClosed` events let long-lived
+producers release resources after disconnects and shutdown.
+
+HTTP/1.1 streams use chunked transfer encoding without implicit compression;
+HTTP/1.0 streams are close-delimited. Existing `respond` calls are unchanged,
+and the optional `responseBodyHandler` parameter is appended to `newServer` so
+existing positional calls remain source compatible.
+
+For server-sent events, import `mummy/sse` and use `respondSse`, `send`,
+`comment`, and `heartbeat`. Multiline data and comments are encoded as separate
+SSE fields; event names and IDs containing field-injection characters are
+rejected. The [`basic_sse.nim`](examples/basic_sse.nim) example is runnable with:
+
+```sh
+nim c --threads:on --mm:orc --path:src -r examples/basic_sse.nim
+```
+
 ## Logging
 
 Mummy emits structured log events through
