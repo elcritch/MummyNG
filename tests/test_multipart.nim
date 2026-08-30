@@ -1,26 +1,27 @@
 import mummy, mummy/multipart
+import std/unittest
 
-block:
+test "requires multipart content type":
   let request = cast[Request](allocShared0(sizeof(RequestObj)))
-  doAssertRaises MummyError:
+  expect MummyError:
     discard request.decodeMultipart()
 
-block:
+test "validates multipart content types and boundaries":
   let request = cast[Request](allocShared0(sizeof(RequestObj)))
   request.body = "--123--"
 
   request.headers["Content-Type"] = "multipart/form-data; boundary=123"
   discard request.decodeMultipart()
 
-  doAssertRaises MummyError:
+  expect MummyError:
     request.headers["Content-Type"] = "asdf; boundary=123"
     discard request.decodeMultipart()
 
-  doAssertRaises MummyError:
+  expect MummyError:
     request.headers["Content-Type"] = "multipart/form-data; boundary="
     discard request.decodeMultipart()
 
-  doAssertRaises MummyError:
+  expect MummyError:
     request.headers["Content-Type"] = "multipart/form-data; boundary=456"
     discard request.decodeMultipart()
 
@@ -36,87 +37,87 @@ block:
   request.body = "--123--\r\n"
   discard request.decodeMultipart()
 
-block:
+test "decodes multipart fields and files":
   let request = cast[Request](allocShared0(sizeof(RequestObj)))
   request.headers["Content-Type"] = "multipart/form-data; boundary=123"
 
   block:
     request.body = "--123\r\nContent-Disposition: form-data; name=\"abc\"\r\n\r\n\r\n--123--"
     let entries = request.decodeMultipart()
-    doAssert entries.len == 1
-    doAssert entries[0].name == "abc"
-    doAssert not entries[0].data.isSome
-    doAssert entries[0].headers == @[("Content-Disposition", "form-data; name=\"abc\"")]
+    check entries.len == 1
+    check entries[0].name == "abc"
+    check not entries[0].data.isSome
+    check entries[0].headers == @[("Content-Disposition", "form-data; name=\"abc\"")]
 
   block:
     request.body = "--123\r\nContent-Disposition: form-data; name=abc\r\n\r\n\r\n--123--"
     let entries = request.decodeMultipart()
-    doAssert entries.len == 1
-    doAssert entries[0].name == "abc"
-    doAssert not entries[0].data.isSome
+    check entries.len == 1
+    check entries[0].name == "abc"
+    check not entries[0].data.isSome
 
   block:
     request.body = "--123\r\nContent-Disposition: form-data; name=abc;zzz\r\n\r\n\r\n--123--"
     let entries = request.decodeMultipart()
-    doAssert entries.len == 1
-    doAssert entries[0].name == "abc"
-    doAssert not entries[0].data.isSome
+    check entries.len == 1
+    check entries[0].name == "abc"
+    check not entries[0].data.isSome
 
   block:
     request.body = "--123\r\nContent-Disposition: form-data; name=abc\r\n--123--"
-    doAssertRaises MummyError:
+    expect MummyError:
       discard request.decodeMultipart()
 
   block:
     request.body = "--123\r\nContent-Disposition: name=\"abc\"\r\n\r\n\r\n--123--"
-    doAssertRaises MummyError:
+    expect MummyError:
       discard request.decodeMultipart()
 
   block:
     request.body = "--123\r\n\r\n--123--"
-    doAssertRaises MummyError:
+    expect MummyError:
       discard request.decodeMultipart()
 
   block:
     request.body = "--123\r\nContent-Disposition: form-data; name=abc\r\n\r\n--123--"
-    doAssertRaises MummyError:
+    expect MummyError:
       echo request.decodeMultipart()
 
   block:
     request.body = "--123\r\nContent-Disposition: form-data; \r\n\r\n--123--"
-    doAssertRaises MummyError:
+    expect MummyError:
       echo request.decodeMultipart()
 
   block:
     request.body = "--123\r\nContent-Disposition: form-data; name=\"abc\"\r\n\r\ndef\r\n--123--"
     let entries = request.decodeMultipart()
-    doAssert entries.len == 1
-    doAssert entries[0].name == "abc"
-    doAssert not entries[0].filename.isSome
-    doAssert entries[0].data.isSome
+    check entries.len == 1
+    check entries[0].name == "abc"
+    check not entries[0].filename.isSome
+    check entries[0].data.isSome
     let (start, last) = entries[0].data.get
-    doAssert request.body[start .. last] == "def"
+    check request.body[start .. last] == "def"
 
   block:
     request.body = "--123\r\nContent-Disposition: form-data; name=\"abc\";filename=\"file.txt\";\r\nContent-Type: text/plain\r\n\r\ndef\r\n--123\r\nContent-Disposition: form-data; name=\"ghi\"\r\nDummy-Header-1: 1\r\nDummy-Header-2: 2\r\nBroken-Header\r\n\r\njkl\r\n--123--"
     let entries = request.decodeMultipart()
 
-    doAssert entries.len == 2
-    doAssert entries[0].name == "abc"
-    doAssert entries[0].filename == some("file.txt")
-    doAssert entries[0].headers.len == 2
-    doAssert entries[0].headers["Content-Type"] == "text/plain"
-    doAssert entries[0].data.isSome
+    check entries.len == 2
+    check entries[0].name == "abc"
+    check entries[0].filename == some("file.txt")
+    check entries[0].headers.len == 2
+    check entries[0].headers["Content-Type"] == "text/plain"
+    check entries[0].data.isSome
     block:
       let (start, last) = entries[0].data.get
-      doAssert request.body[start .. last] == "def"
+      check request.body[start .. last] == "def"
 
-    doAssert entries[1].name == "ghi"
-    doAssert entries[1].data.isSome
+    check entries[1].name == "ghi"
+    check entries[1].data.isSome
     block:
       let (start, last) = entries[1].data.get
-      doAssert request.body[start .. last] == "jkl"
-    doAssert entries[1].headers == @[
+      check request.body[start .. last] == "jkl"
+    check entries[1].headers == @[
       ("Content-Disposition", "form-data; name=\"ghi\""),
       ("Dummy-Header-1", "1"),
       ("Dummy-Header-2", "2"),

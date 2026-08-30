@@ -1,8 +1,9 @@
 import httpclient, mummy, zippy
+import std/unittest
 
 proc handler(request: Request) =
   echo request
-  doAssert request.uri == request.path
+  check request.uri == request.path
   case request.uri:
   of "/":
     if request.httpMethod == "GET":
@@ -28,7 +29,7 @@ proc handler(request: Request) =
       request.respond(405)
   else:
     request.respond(404)
-  doAssert request.responded == true
+  check request.responded == true
 
 let server = newServer(handler)
 
@@ -39,34 +40,34 @@ proc requesterProc() =
 
   block:
     let client = newHttpClient()
-    doAssert client.getContent("http://localhost:8081/") == "Hello, World!"
+    check client.getContent("http://localhost:8081/") == "Hello, World!"
 
   block:
     let client = newHttpClient()
-    doAssert client.post("http://localhost:8081/", "").status == "405"
+    check client.post("http://localhost:8081/", "").status == "405"
 
   block:
     let client = newHttpClient()
     client.headers = newHttpHeaders({"Accept-Encoding": "gzip"})
     let response = client.request("http://localhost:8081/compressed")
-    doAssert response.headers["Content-Encoding"] == "gzip"
+    check response.headers["Content-Encoding"] == "gzip"
     discard uncompress(response.body, dfGzip)
 
   block:
     let client = newHttpClient()
     client.headers = newHttpHeaders({"Accept-Encoding": "deflate"})
     let response = client.request("http://localhost:8081/compressed")
-    doAssert response.headers["Content-Encoding"] == "deflate"
+    check response.headers["Content-Encoding"] == "deflate"
     discard uncompress(response.body, dfDeflate)
 
   block:
     let client = newHttpClient()
-    doAssert client.get("http://localhost:8081/raise").status == "500"
+    check client.get("http://localhost:8081/raise").status == "500"
 
   echo "Done, shut down the server"
   server.close()
 
-createThread(requesterThread, requesterProc)
-
-# Start the server
-server.serve(Port(8081))
+suite "HTTP server":
+  test "serves methods, compression, and handler failures":
+    createThread(requesterThread, requesterProc)
+    server.serve(Port(8081))

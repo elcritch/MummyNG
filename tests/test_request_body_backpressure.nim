@@ -1,4 +1,5 @@
 import mummy
+import std/unittest
 import std/[atomics, nativesockets, os, strutils, times]
 
 when defined(windows):
@@ -29,8 +30,8 @@ proc requestBodyHandler(
 ) =
   case event.kind
   of RequestBodyOpen:
-    doAssert request.path == "/backpressure"
-    doAssert stream.accept()
+    check request.path == "/backpressure"
+    check stream.accept()
   of RequestBodyChunk:
     let previous = bytesHandled.fetchAdd(event.data.len, moRelaxed)
     if previous == 0:
@@ -38,7 +39,7 @@ proc requestBodyHandler(
       while not releaseFirstChunk.load(moAcquire):
         sleep(1)
   of RequestBodyEnd:
-    doAssert bytesHandled.load(moRelaxed) == bodyLen
+    check bytesHandled.load(moRelaxed) == bodyLen
     request.respond(200, body = "upload complete")
   of RequestBodyError:
     discard
@@ -139,30 +140,37 @@ proc requesterProc() =
     )
     createThread(senderThread, sendBody, socket)
 
-    doAssert firstChunkEntered.waitFor(5),
-      "request body handler did not receive the first chunk"
+    let firstChunkReceived = firstChunkEntered.waitFor(5)
+    if not firstChunkReceived:
+      checkpoint "request body handler did not receive the first chunk"
+    check firstChunkReceived
     sleep(250)
-    doAssert not senderFinished.load(moAcquire),
-      "sender completed while the first chunk handler was blocked"
+    if senderFinished.load(moAcquire):
+      checkpoint "sender completed while the first chunk handler was blocked"
+    check not senderFinished.load(moAcquire)
 
     releaseFirstChunk.store(true, moRelease)
     if not senderFinished.waitFor(10):
       socket.close()
       socketOpen = false
       joinThread(senderThread)
-      doAssert false, "sender did not resume after the handler returned"
+      checkpoint "sender did not resume after the handler returned"
+      check false
 
     joinThread(senderThread)
-    doAssert senderSucceeded.load(moAcquire),
-      "sender failed before completing the upload"
+    if not senderSucceeded.load(moAcquire):
+      checkpoint "sender failed before completing the upload"
+    check senderSucceeded.load(moAcquire)
     let response = socket.readResponse()
-    doAssert response.startsWith("HTTP/1.1 200")
-    doAssert response.endsWith("upload complete")
+    check response.startsWith("HTTP/1.1 200")
+    check response.endsWith("upload complete")
   finally:
     releaseFirstChunk.store(true, moRelease)
     if socketOpen:
       socket.close()
 
-createThread(requesterThread, requesterProc)
-server.serve(port)
-joinThread(requesterThread)
+suite "request body backpressure":
+  test "pauses socket reads while a chunk is handled":
+    createThread(requesterThread, requesterProc)
+    server.serve(port)
+    joinThread(requesterThread)

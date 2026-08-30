@@ -1,4 +1,5 @@
 import httpclient, jsony, mummy, std/random
+import std/unittest
 
 randomize()
 
@@ -6,8 +7,8 @@ type TestObject = object
   val: int
 
 proc handler(request: Request) =
-  doAssert "v" in request.queryParams
-  doAssert request.queryParams.len == 1
+  check "v" in request.queryParams
+  check request.queryParams.len == 1
   case request.path:
   of "/":
     if request.httpMethod == "POST":
@@ -42,10 +43,7 @@ proc requesterProc() =
     var to: TestObject
     to.val = rand(0 ..< 100)
     let response = client.post("http://localhost:8081/?v=" & $i, toJson(to))
-    doAssert fromJson(response.body, TestObject).val == to.val + 1
-
-for requesterThread in requesterThreads.mitems:
-  createThread(requesterThread, requesterProc)
+    check fromJson(response.body, TestObject).val == to.val + 1
 
 proc waitProc() =
   {.gcsafe.}:
@@ -53,7 +51,9 @@ proc waitProc() =
     echo "Done, shut down the server"
     server.close()
 
-createThread(waitingThread, waitProc)
-
-# Start the server
-server.serve(Port(8081))
+suite "concurrent HTTP requests":
+  test "processes concurrent requests":
+    for requesterThread in requesterThreads.mitems:
+      createThread(requesterThread, requesterProc)
+    createThread(waitingThread, waitProc)
+    server.serve(Port(8081))

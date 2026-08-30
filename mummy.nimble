@@ -1,4 +1,4 @@
-version     = "0.6.1"
+version     = "0.6.2"
 author      = "Ryan Oldenburg / Jaremy Creechley"
 description = "Multithreaded HTTP + WebSocket server"
 license     = "MIT"
@@ -12,7 +12,7 @@ requires "crunchy >= 0.1.11"
 requires "chroniclers >= 0.3.0"
 
 feature "chronicles":
-  requires "chroniclers[chronicles] >= 0.3.0"
+  requires "chroniclers >= 0.3.0 [chronicles]"
 
 feature "testing":
   requires "chronicles >= 0.12.3"

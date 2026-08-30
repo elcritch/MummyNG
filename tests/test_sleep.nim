@@ -1,4 +1,5 @@
 import std/os, mummy, std/atomics, std/httpclient
+import std/unittest
 
 var
   requestCounter: Atomic[int]
@@ -18,17 +19,17 @@ proc serverProc() =
   {.gcsafe.}:
     server.serve(Port(8080))
 
-createThread(serverThread, serverProc)
+suite "worker sleep":
+  test "responds before slow handlers finish":
+    createThread(serverThread, serverProc)
+    server.waitUntilReady()
 
-server.waitUntilReady()
+    for i in 0 ..< 10:
+      let client = newHttpClient()
+      discard client.getContent("http://localhost:8080/")
 
-for i in 0 ..< 10:
-  block:
-    let client = newHttpClient()
-    discard client.getContent("http://localhost:8080/")
+    check requestCounter.exchange(0, moRelaxed) == 10
+    check doneCounter.exchange(0, moRelaxed) == 0
 
-doAssert requestCounter.exchange(0, moRelaxed) == 10
-doAssert doneCounter.exchange(0, moRelaxed) == 0
-
-echo "Done, shut down the server"
-server.close()
+    echo "Done, shut down the server"
+    server.close()

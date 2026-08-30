@@ -1,16 +1,20 @@
 import mummy, mummy/routers, webby/urls
+import std/unittest
 
 proc handler(request: Request) =
   discard
 
-block:
+proc unexpectedHandler(request: Request) =
+  raise newException(AssertionDefect, "unexpected route handler invocation")
+
+proc unexpectedErrorHandler(request: Request, e: ref Exception) =
+  raise newException(AssertionDefect, "unexpected route error handler invocation")
+
+test "matches literal and single-segment wildcard routes":
   var router: Router
-  router.notFoundHandler = proc(request: Request) =
-    doAssert false
-  router.methodNotAllowedHandler = proc(request: Request) =
-    doAssert false
-  router.errorHandler = proc(request: Request, e: ref Exception) =
-    doAssert false
+  router.notFoundHandler = unexpectedHandler
+  router.methodNotAllowedHandler = unexpectedHandler
+  router.errorHandler = unexpectedErrorHandler
 
   router.get("/", handler)
   router.get("/page.html", handler)
@@ -22,20 +26,20 @@ block:
   router.get("/*double*", handler)
   router.get("/質問/日本語のURLはどうする", handler)
 
-  doAssertRaises MummyError:
+  expect MummyError:
     router.get("/**/*", handler)
 
-  doAssertRaises MummyError:
+  expect MummyError:
     router.get("/**/**", handler)
 
-  doAssertRaises MummyError:
+  expect MummyError:
     router.get("/**/bad/**/**", handler)
 
-  doAssertRaises MummyError:
+  expect MummyError:
     let s = ""
     router.get(s, handler)
 
-  doAssertRaises MummyError:
+  expect MummyError:
     let s = "abc"
     router.get(s, handler)
 
@@ -45,18 +49,18 @@ block:
   request.httpMethod = "GET"
 
   request.path = ""
-  doAssertRaises AssertionDefect:
+  expect AssertionDefect:
     routerHandler(request)
 
   request.path = "page.html"
-  doAssertRaises AssertionDefect:
+  expect AssertionDefect:
     routerHandler(request)
 
   request.path = "/"
   routerHandler(request)
 
   request.path = "/a"
-  doAssertRaises AssertionDefect:
+  expect AssertionDefect:
     routerHandler(request)
 
   request.path = "/page.html"
@@ -69,22 +73,22 @@ block:
   routerHandler(request)
 
   request.path = "/script.j"
-  doAssertRaises AssertionDefect:
+  expect AssertionDefect:
     routerHandler(request)
 
   request.path = "/script.html"
-  doAssertRaises AssertionDefect:
+  expect AssertionDefect:
     routerHandler(request)
 
   request.path = "/script"
-  doAssertRaises AssertionDefect:
+  expect AssertionDefect:
     routerHandler(request)
 
   request.path = "/min.js"
   routerHandler(request)
 
   request.path = "/index.html"
-  doAssertRaises AssertionDefect:
+  expect AssertionDefect:
     routerHandler(request)
 
   request.path = "/a/index.html"
@@ -94,29 +98,29 @@ block:
   routerHandler(request)
 
   request.path = "/a/b/index.html"
-  doAssertRaises AssertionDefect:
+  expect AssertionDefect:
     routerHandler(request)
 
   request.path = "/styles/index.css"
   routerHandler(request)
 
   request.path = "/styles/2/index.css"
-  doAssertRaises AssertionDefect:
+  expect AssertionDefect:
     routerHandler(request)
 
   request.path = "/styles/script.js"
-  doAssertRaises AssertionDefect:
+  expect AssertionDefect:
     routerHandler(request)
 
   request.path = "/partial"
-  doAssertRaises AssertionDefect:
+  expect AssertionDefect:
     routerHandler(request)
 
   request.path = "/partial/something"
   routerHandler(request)
 
   request.path = "/partial/more/here"
-  doAssertRaises AssertionDefect:
+  expect AssertionDefect:
     routerHandler(request)
 
   request.path = "/literal*"
@@ -144,7 +148,7 @@ block:
   routerHandler(request)
 
   request.path = "/doubl"
-  doAssertRaises AssertionDefect:
+  expect AssertionDefect:
     routerHandler(request)
 
   block:
@@ -154,17 +158,14 @@ block:
 
   deallocShared(request)
 
-block:
+test "matches catch-all routes":
   var router: Router
-  router.notFoundHandler = proc(request: Request) =
-    doAssert false
-  router.methodNotAllowedHandler = proc(request: Request) =
-    doAssert false
-  router.errorHandler = proc(request: Request, e: ref Exception) =
-    doAssert false
+  router.notFoundHandler = unexpectedHandler
+  router.methodNotAllowedHandler = unexpectedHandler
+  router.errorHandler = unexpectedErrorHandler
 
   proc badHandler(request: Request) =
-    doAssert false
+    raise newException(AssertionDefect, "unexpected fallback handler invocation")
 
   router.get("/**", handler)
   router.get("/**", badHandler)
@@ -189,14 +190,11 @@ block:
   request.path = "/a/b/c/d/e/f/g/h.txt"
   routerHandler(request)
 
-block:
+test "matches a catch-all between literal segments":
   var router: Router
-  router.notFoundHandler = proc(request: Request) =
-    doAssert false
-  router.methodNotAllowedHandler = proc(request: Request) =
-    doAssert false
-  router.errorHandler = proc(request: Request, e: ref Exception) =
-    doAssert false
+  router.notFoundHandler = unexpectedHandler
+  router.methodNotAllowedHandler = unexpectedHandler
+  router.errorHandler = unexpectedErrorHandler
 
   router.get("/**/TEST/**", handler)
 
@@ -206,28 +204,25 @@ block:
   request.httpMethod = "GET"
 
   request.path = "/"
-  doAssertRaises AssertionDefect:
+  expect AssertionDefect:
     routerHandler(request)
 
   request.path = "/TEST/page.html"
-  doAssertRaises AssertionDefect:
+  expect AssertionDefect:
     routerHandler(request)
 
   request.path = "/TEST/a/b/c/d.html"
-  doAssertRaises AssertionDefect:
+  expect AssertionDefect:
     routerHandler(request)
 
   request.path = "/a/TEST/b.html"
   routerHandler(request)
 
-block:
+test "matches multiple catch-alls between literal segments":
   var router: Router
-  router.notFoundHandler = proc(request: Request) =
-    doAssert false
-  router.methodNotAllowedHandler = proc(request: Request) =
-    doAssert false
-  router.errorHandler = proc(request: Request, e: ref Exception) =
-    doAssert false
+  router.notFoundHandler = unexpectedHandler
+  router.methodNotAllowedHandler = unexpectedHandler
+  router.errorHandler = unexpectedErrorHandler
 
   router.get("/**/TEST/**/TEST2/**", handler)
 
@@ -237,31 +232,31 @@ block:
   request.httpMethod = "GET"
 
   request.path = "/"
-  doAssertRaises AssertionDefect:
+  expect AssertionDefect:
     routerHandler(request)
 
   request.path = "/index.html"
-  doAssertRaises AssertionDefect:
+  expect AssertionDefect:
     routerHandler(request)
 
   request.path = "/path"
-  doAssertRaises AssertionDefect:
+  expect AssertionDefect:
     routerHandler(request)
 
   request.path = "/path/to/thing.html"
-  doAssertRaises AssertionDefect:
+  expect AssertionDefect:
     routerHandler(request)
 
   request.path = "/a/b/c/d/e/f/g/h.txt"
-  doAssertRaises AssertionDefect:
+  expect AssertionDefect:
     routerHandler(request)
 
   request.path = "/a/b/TEST/d/f/g.html"
-  doAssertRaises AssertionDefect:
+  expect AssertionDefect:
     routerHandler(request)
 
   request.path = "/a/TEST/page.html"
-  doAssertRaises AssertionDefect:
+  expect AssertionDefect:
     routerHandler(request)
 
   request.path = "/a/b/TEST/d/f/g/TEST2/page.html"
@@ -271,33 +266,30 @@ block:
   routerHandler(request)
 
   request.path = "/TEST/page.html&3"
-  doAssertRaises AssertionDefect:
+  expect AssertionDefect:
     routerHandler(request)
 
   request.path = "/TEST/TEST2/"
-  doAssertRaises AssertionDefect:
+  expect AssertionDefect:
     routerHandler(request)
 
   request.path = "/TEST/TEST2/page.html"
-  doAssertRaises AssertionDefect:
+  expect AssertionDefect:
     routerHandler(request)
 
   request.path = "/a/TEST/TEST2/"
-  doAssertRaises AssertionDefect:
+  expect AssertionDefect:
     routerHandler(request)
 
   request.path = "/a/TEST/TEST2/page.html"
-  doAssertRaises AssertionDefect:
+  expect AssertionDefect:
     routerHandler(request)
 
-block:
+test "matches mixed segment and catch-all wildcards":
   var router: Router
-  router.notFoundHandler = proc(request: Request) =
-    doAssert false
-  router.methodNotAllowedHandler = proc(request: Request) =
-    doAssert false
-  router.errorHandler = proc(request: Request, e: ref Exception) =
-    doAssert false
+  router.notFoundHandler = unexpectedHandler
+  router.methodNotAllowedHandler = unexpectedHandler
+  router.errorHandler = unexpectedErrorHandler
 
   router.get("/*page/**/*.html", handler)
 
@@ -307,7 +299,7 @@ block:
   request.httpMethod = "GET"
 
   request.path = "/"
-  doAssertRaises AssertionDefect:
+  expect AssertionDefect:
     routerHandler(request)
 
   request.path = "/page/thing/do.html"
@@ -317,21 +309,18 @@ block:
   routerHandler(request)
 
   request.path = "/wowpage/do.html"
-  doAssertRaises AssertionDefect:
+  expect AssertionDefect:
     routerHandler(request)
 
   request.path = "/wowpage/a/do.htm"
-  doAssertRaises AssertionDefect:
+  expect AssertionDefect:
     routerHandler(request)
 
-block:
+test "matches suffix wildcards":
   var router: Router
-  router.notFoundHandler = proc(request: Request) =
-    doAssert false
-  router.methodNotAllowedHandler = proc(request: Request) =
-    doAssert false
-  router.errorHandler = proc(request: Request, e: ref Exception) =
-    doAssert false
+  router.notFoundHandler = unexpectedHandler
+  router.methodNotAllowedHandler = unexpectedHandler
+  router.errorHandler = unexpectedErrorHandler
 
   router.get("/*a", handler)
 
@@ -350,21 +339,18 @@ block:
   routerHandler(request)
 
   request.path = "/a/"
-  doAssertRaises AssertionDefect:
+  expect AssertionDefect:
     routerHandler(request)
 
   request.path = "/something"
-  doAssertRaises AssertionDefect:
+  expect AssertionDefect:
     routerHandler(request)
 
-block:
+test "matches contains wildcards":
   var router: Router
-  router.notFoundHandler = proc(request: Request) =
-    doAssert false
-  router.methodNotAllowedHandler = proc(request: Request) =
-    doAssert false
-  router.errorHandler = proc(request: Request, e: ref Exception) =
-    doAssert false
+  router.notFoundHandler = unexpectedHandler
+  router.methodNotAllowedHandler = unexpectedHandler
+  router.errorHandler = unexpectedErrorHandler
 
   router.get("/*something*", handler)
 
@@ -386,21 +372,18 @@ block:
   routerHandler(request)
 
   request.path = "/something/"
-  doAssertRaises AssertionDefect:
+  expect AssertionDefect:
     routerHandler(request)
 
   request.path = "/something/else"
-  doAssertRaises AssertionDefect:
+  expect AssertionDefect:
     routerHandler(request)
 
-block:
+test "treats embedded single stars literally":
   var router: Router
-  router.notFoundHandler = proc(request: Request) =
-    doAssert false
-  router.methodNotAllowedHandler = proc(request: Request) =
-    doAssert false
-  router.errorHandler = proc(request: Request, e: ref Exception) =
-    doAssert false
+  router.notFoundHandler = unexpectedHandler
+  router.methodNotAllowedHandler = unexpectedHandler
+  router.errorHandler = unexpectedErrorHandler
 
   router.get("/a*b", handler) # Not a wildcard here
 
@@ -410,28 +393,25 @@ block:
   request.httpMethod = "GET"
 
   request.path = "/a"
-  doAssertRaises AssertionDefect:
+  expect AssertionDefect:
     routerHandler(request)
 
   request.path = "/ab"
-  doAssertRaises AssertionDefect:
+  expect AssertionDefect:
     routerHandler(request)
 
   request.path = "/asomethingb"
-  doAssertRaises AssertionDefect:
+  expect AssertionDefect:
     routerHandler(request)
 
   request.path = "/a*b"
   routerHandler(request)
 
-block:
+test "treats embedded double stars literally":
   var router: Router
-  router.notFoundHandler = proc(request: Request) =
-    doAssert false
-  router.methodNotAllowedHandler = proc(request: Request) =
-    doAssert false
-  router.errorHandler = proc(request: Request, e: ref Exception) =
-    doAssert false
+  router.notFoundHandler = unexpectedHandler
+  router.methodNotAllowedHandler = unexpectedHandler
+  router.errorHandler = unexpectedErrorHandler
 
   router.get("/**z", handler) # Not a wildcard here
   router.get("/a**b", handler) # Not a wildcard here
@@ -442,75 +422,72 @@ block:
   request.httpMethod = "GET"
 
   request.path = "/a"
-  doAssertRaises AssertionDefect:
+  expect AssertionDefect:
     routerHandler(request)
 
   request.path = "/ab"
-  doAssertRaises AssertionDefect:
+  expect AssertionDefect:
     routerHandler(request)
 
   request.path = "/asomethingb"
-  doAssertRaises AssertionDefect:
+  expect AssertionDefect:
     routerHandler(request)
 
   request.path = "/a**b"
   routerHandler(request)
 
-block:
+test "stores path parameters":
   var pathParams: PathParams
-  doAssert "foo" notin pathParams
+  check "foo" notin pathParams
   pathParams["foo"] = "bar"
-  doAssert "foo" in pathParams
-  doAssert pathParams.len == 1
-  doAssert pathParams["foo"] == "bar"
+  check "foo" in pathParams
+  check pathParams.len == 1
+  check pathParams["foo"] == "bar"
 
-block:
+test "matches parameterized routes":
   var router: Router
-  router.notFoundHandler = proc(request: Request) =
-    doAssert false
-  router.methodNotAllowedHandler = proc(request: Request) =
-    doAssert false
-  router.errorHandler = proc(request: Request, e: ref Exception) =
-    doAssert false
+  router.notFoundHandler = unexpectedHandler
+  router.methodNotAllowedHandler = unexpectedHandler
+  router.errorHandler = unexpectedErrorHandler
 
   proc routeHandler1(request: Request) =
-    doAssert "id" in request.pathParams
-    doAssert request.pathParams.len == 1
-    doAssert request.pathParams["id"] == "123"
+    check "id" in request.pathParams
+    check request.pathParams.len == 1
+    check request.pathParams["id"] == "123"
 
   router.get("/@id", routeHandler1)
 
   proc routeHandler2(request: Request) =
-    doAssert "name" in request.pathParams
-    doAssert "id" in request.pathParams
-    doAssert request.pathParams.len == 2
-    doAssert request.pathParams["name"] == "abc"
-    doAssert request.pathParams["id"] == "123"
+    check "name" in request.pathParams
+    check "id" in request.pathParams
+    check request.pathParams.len == 2
+    check request.pathParams["name"] == "abc"
+    check request.pathParams["id"] == "123"
 
   router.get("/@name/@id", routeHandler2)
 
   proc routeHandler3(request: Request) =
-    doAssert "first" in request.pathParams
-    doAssert "second" in request.pathParams
-    doAssert request.pathParams.len == 2
-    doAssert request.pathParams["first"] == "a"
-    doAssert request.pathParams["second"] == "b"
+    check "first" in request.pathParams
+    check "second" in request.pathParams
+    check request.pathParams.len == 2
+    check request.pathParams["first"] == "a"
+    check request.pathParams["second"] == "b"
 
   router.get("/@first/zzz/@second", routeHandler3)
 
   proc routeHandler4(request: Request) =
-    doAssert "first" in request.pathParams
-    doAssert "second" in request.pathParams
-    doAssert request.pathParams.len == 2
-    doAssert request.pathParams["first"] == "a"
-    doAssert request.pathParams["second"] == "b"
+    check "first" in request.pathParams
+    check "second" in request.pathParams
+    check request.pathParams.len == 2
+    check request.pathParams["first"] == "a"
+    check request.pathParams["second"] == "b"
 
   router.get("/@first/*/@second", routeHandler4)
 
   proc routeHandler5(request: Request) =
-    doAssert "name" in request.pathParams
-    doAssert request.pathParams.len == 1
-    doAssert request.pathParams["name"] == "bob"
+    check "name" in request.pathParams
+    check request.pathParams.len == 1
+    check request.pathParams["name"] == "bob"
 
   router.get("/a/**/literal/@name", routeHandler5)
 

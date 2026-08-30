@@ -1,4 +1,5 @@
 import mummy, std/nativesockets, std/os
+import std/unittest
 
 when defined(windows):
   import winlean
@@ -55,7 +56,7 @@ proc requesterProc() =
       0
     )
 
-    doAssert bytesReceived == 0
+    check bytesReceived == 0
 
     socket.close()
 
@@ -73,13 +74,14 @@ proc requesterProc() =
       0
     )
 
-    doAssert bytesReceived == 0
+    check bytesReceived == 0
 
     socket.close()
 
   echo "Done, shut down the server"
   server.close()
 
-createThread(requesterThread, requesterProc)
-
-server.serve(port)
+suite "request smuggling protection":
+  test "rejects conflicting transfer encodings":
+    createThread(requesterThread, requesterProc)
+    server.serve(port)

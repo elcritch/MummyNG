@@ -1,4 +1,5 @@
 import mummy, std/asyncdispatch, whisky
+import std/unittest
 
 proc handler(request: Request) =
   case request.uri:
@@ -20,25 +21,25 @@ proc websocketHandler(
 ) =
   case event:
   of OpenEvent:
-    doAssert n == 0
+    check n == 0
     n += 1
     websocket.send("Second")
   of MessageEvent:
     case message.kind:
     of mummy.TextMessage:
-      doAssert n == 1
+      check n == 1
       n += 1
-      doAssert message.data == "Third"
+      check message.data == "Third"
     of mummy.BinaryMessage:
-      doAssert n == 2
+      check n == 2
       n += 1
-      doAssert message.data == "Fourth"
+      check message.data == "Fourth"
     of mummy.Ping:
-      doAssert n == 3
+      check n == 3
       n += 1
-      doAssert message.data == ""
+      check message.data == ""
     of mummy.Pong:
-      doAssert false
+      check false
     var fifth: string
     for i in 0 ..< 0xffff + 1:
       fifth.add 'a'
@@ -46,7 +47,7 @@ proc websocketHandler(
   of ErrorEvent:
     discard
   of CloseEvent:
-    doAssert n == 4
+    check n == 4
     echo "Closed websocket connection"
 
 let server = newServer(handler, websocketHandler)
@@ -57,22 +58,22 @@ proc requesterProc() =
   server.waitUntilReady()
 
   let ws = newWebSocket("ws://127.0.0.1:8081")
-  doAssert ws.receiveMessage() ==
+  check ws.receiveMessage() ==
     some(whisky.Message(kind: whisky.TextMessage, data: "First"))
-  doAssert ws.receiveMessage() ==
+  check ws.receiveMessage() ==
     some(whisky.Message(kind: whisky.TextMessage, data: "Second"))
   ws.send("Third")
   ws.send("Fourth", whisky.BinaryMessage)
   ws.send("", whisky.Ping)
   let fifth = ws.receiveMessage()
-  doAssert fifth.get.kind == whisky.BinaryMessage
-  doAssert fifth.get.data.len == 0xffff + 1
+  check fifth.get.kind == whisky.BinaryMessage
+  check fifth.get.data.len == 0xffff + 1
   ws.close()
 
   echo "Done, shut down the server"
   server.close()
 
-createThread(requesterThread, requesterProc)
-
-# Start the server
-server.serve(Port(8081))
+suite "WebSocket server":
+  test "exchanges text, binary, and ping frames":
+    createThread(requesterThread, requesterProc)
+    server.serve(Port(8081))
