@@ -1,4 +1,5 @@
 import mummy, mummy/sse
+import std/unittest
 import std/[atomics, httpclient, nativesockets, options, os, strutils, times]
 
 const port = Port(8097)
@@ -20,7 +21,7 @@ proc handler(request: Request) {.gcsafe.} =
     discard request.respondStream(headers = headers)
   of "/head":
     let stream = request.respondStream()
-    doAssert not stream.write("not sent")
+    check not stream.write("not sent")
   of "/http10":
     mode.store(2, moRelaxed)
     discard request.respondStream()
@@ -54,64 +55,66 @@ proc streamHandler(
     openMode.store(currentMode, moRelaxed)
     case currentMode
     of 1:
-      doAssert writeStep.load(moRelaxed) == 0
+      check writeStep.load(moRelaxed) == 0
       writeStep.store(1, moRelaxed)
-      doAssert stream.write("hello, ")
-      doAssert not stream.write("too early")
+      check stream.write("hello, ")
+      check not stream.write("too early")
     of 2:
-      doAssert stream.write("http10")
+      check stream.write("http10")
     of 3:
       raise newException(ValueError, "expected response body handler failure")
     of 5:
-      doAssert sseStep.load(moRelaxed) == 0
+      check sseStep.load(moRelaxed) == 0
       sseStep.store(1, moRelaxed)
-      doAssert stream.send(SseEvent(
+      check stream.send(SseEvent(
         data: "hello",
         event: "ready",
         id: "1",
         retry: some(0.Natural)
       ))
     of 6:
-      doAssert not stream.write("too late")
+      check not stream.write("too late")
     of 4, 7:
       discard
     else:
-      doAssert false, "unexpected response stream mode"
+      checkpoint "unexpected response stream mode"
+      check false
   of ResponseBodyWritable:
     case currentMode
     of 1:
-      doAssert writeStep.load(moRelaxed) == 1
+      check writeStep.load(moRelaxed) == 1
       writeStep.store(2, moRelaxed)
-      doAssert stream.write("stream")
+      check stream.write("stream")
       stream.close()
     of 2:
       stream.close()
     of 5:
       if sseStep.load(moRelaxed) == 1:
         sseStep.store(2, moRelaxed)
-        doAssert stream.heartbeat("ping")
+        check stream.heartbeat("ping")
       else:
-        doAssert sseStep.load(moRelaxed) == 2
+        check sseStep.load(moRelaxed) == 2
         sseStep.store(3, moRelaxed)
         stream.close()
     else:
-      doAssert false, "unexpected Writable event"
+      checkpoint "unexpected Writable event"
+      check false
   of ResponseBodyError:
-    doAssert currentMode in {3, 4, 7}
-    doAssert errorMode.load(moRelaxed) < currentMode
+    check currentMode in {3, 4, 7}
+    check errorMode.load(moRelaxed) < currentMode
     errorMode.store(currentMode, moRelaxed)
   of ResponseBodyClosed:
     if currentMode in {3, 4, 7}:
-      doAssert errorMode.load(moRelaxed) == currentMode
-    doAssert not stream.write("too late")
+      check errorMode.load(moRelaxed) == currentMode
+    check not stream.write("too late")
     stream.close()
     closedMode.store(currentMode, moRelaxed)
 
-static:
+test "supports legacy server constructor calls":
   # Keep the original Mummy positional call shape source compatible.
-  doAssert compiles(newServer(handler, nil, 1, 8192, 1024, 65536, true))
+  check compiles(newServer(handler, nil, 1, 8192, 1024, 65536, true))
   # Keep the request-body streaming call shape source compatible too.
-  doAssert compiles(newServer(
+  check compiles(newServer(
     handler, nil, 1, 8192, 1024, 65536, true, nil, 65536
   ))
 
@@ -163,7 +166,7 @@ proc readAll(socket: SocketHandle): string =
 proc waitFor(value: var Atomic[int], expected: int) =
   let started = epochTime()
   while value.load(moRelaxed) != expected:
-    doAssert epochTime() - started < 5
+    check epochTime() - started < 5
     sleep(10)
 
 proc requestRaw(
@@ -184,14 +187,14 @@ proc requesterProc() {.thread, gcsafe.} =
 
   block chunked:
     let response = requestRaw("/stream")
-    doAssert response.startsWith("HTTP/1.1 200")
-    doAssert "Transfer-Encoding: chunked" in response
-    doAssert "Content-Length" notin response
-    doAssert response.endsWith(
-      "7\r\nhello, \r\n6\r\nstream\r\n0\r\n\r\n"
-    ), response
+    check response.startsWith("HTTP/1.1 200")
+    check "Transfer-Encoding: chunked" in response
+    check "Content-Length" notin response
+    if not response.endsWith("7\r\nhello, \r\n6\r\nstream\r\n0\r\n\r\n"):
+      checkpoint response
+    check response.endsWith("7\r\nhello, \r\n6\r\nstream\r\n0\r\n\r\n")
     waitFor(closedMode, 1)
-    doAssert writeStep.load(moRelaxed) == 2
+    check writeStep.load(moRelaxed) == 2
 
   block head:
     let client = newHttpClient()
@@ -199,14 +202,16 @@ proc requesterProc() {.thread, gcsafe.} =
       "http://localhost:" & $port.int & "/head",
       httpMethod = HttpHead
     )
-    doAssert response.status.startsWith("200")
+    check response.status.startsWith("200")
     client.close()
 
   block http10:
     let response = requestRaw("/http10", "HTTP/1.0")
-    doAssert response.startsWith("HTTP/1.1 200")
-    doAssert "Transfer-Encoding" notin response
-    doAssert response.endsWith("http10"), response
+    check response.startsWith("HTTP/1.1 200")
+    check "Transfer-Encoding" notin response
+    if not response.endsWith("http10"):
+      checkpoint response
+    check response.endsWith("http10")
     waitFor(closedMode, 2)
 
   block handlerException:
@@ -222,18 +227,20 @@ proc requesterProc() {.thread, gcsafe.} =
 
   block sse:
     let response = requestRaw("/sse", extraHeaders = "Accept-Encoding: gzip\r\n")
-    doAssert "Content-Type: text/event-stream" in response
-    doAssert "Cache-Control: no-cache" in response
-    doAssert "X-Accel-Buffering: no" in response
-    doAssert "Content-Encoding" notin response
-    doAssert "id: 1\nevent: ready\nretry: 0\ndata: hello\n\n" in response
-    doAssert ": ping\n\n" in response
+    check "Content-Type: text/event-stream" in response
+    check "Cache-Control: no-cache" in response
+    check "X-Accel-Buffering: no" in response
+    check "Content-Encoding" notin response
+    check "id: 1\nevent: ready\nretry: 0\ndata: hello\n\n" in response
+    check ": ping\n\n" in response
     waitFor(closedMode, 5)
-    doAssert sseStep.load(moRelaxed) == 3
+    check sseStep.load(moRelaxed) == 3
 
   block closeBeforeOpen:
     let response = requestRaw("/close-before-open")
-    doAssert response.endsWith("0\r\n\r\n"), response
+    if not response.endsWith("0\r\n\r\n"):
+      checkpoint response
+    check response.endsWith("0\r\n\r\n")
     waitFor(closedMode, 6)
 
   block shutdown:
@@ -244,7 +251,9 @@ proc requesterProc() {.thread, gcsafe.} =
     discard socket.readAll()
     socket.close()
 
-createThread(requester, requesterProc)
-server.serve(port)
-doAssert closedMode.load(moRelaxed) == 7
-doAssert errorMode.load(moRelaxed) == 7
+suite "response body streams":
+  test "streams responses and server-sent events":
+    createThread(requester, requesterProc)
+    server.serve(port)
+    check closedMode.load(moRelaxed) == 7
+    check errorMode.load(moRelaxed) == 7

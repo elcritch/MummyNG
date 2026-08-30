@@ -1,6 +1,6 @@
 import mummy
 import mummy/multipart
-import std/[assertions, options, strutils]
+import std/[unittest, options, strutils]
 
 const
   boundary = "AaB03x"
@@ -28,10 +28,10 @@ proc collect(
     of MultipartPartBegin:
       parts.add(CollectedPart(metadata: event.part))
     of MultipartPartData:
-      doAssert parts.len > 0
+      check parts.len > 0
       parts[^1].body.add(event.data)
     of MultipartPartEnd:
-      doAssert parts.len > 0
+      check parts.len > 0
       parts[^1].ended = true
     of MultipartMessageEnd:
       ended = true
@@ -50,22 +50,22 @@ proc decode(chunkSize: Positive): tuple[parts: seq[CollectedPart], ended: bool] 
     offset = ending
   collect(decoder.finish(), result.parts, result.ended)
 
-block decodes_across_every_chunk_size:
+test "decodes every chunk size":
   for chunkSize in 1 .. multipartBody.len:
     let decoded = decode(chunkSize)
-    doAssert decoded.ended
-    doAssert decoded.parts.len == 2
-    doAssert decoded.parts[0].metadata.name == "field"
-    doAssert decoded.parts[0].metadata.filename.isNone
-    doAssert decoded.parts[0].body == "value"
-    doAssert decoded.parts[0].ended
-    doAssert decoded.parts[1].metadata.name == "upload"
-    doAssert decoded.parts[1].metadata.filename == some("a.txt")
-    doAssert decoded.parts[1].metadata.headers["Content-Type"] == "text/plain"
-    doAssert decoded.parts[1].body == "abc"
-    doAssert decoded.parts[1].ended
+    check decoded.ended
+    check decoded.parts.len == 2
+    check decoded.parts[0].metadata.name == "field"
+    check decoded.parts[0].metadata.filename.isNone
+    check decoded.parts[0].body == "value"
+    check decoded.parts[0].ended
+    check decoded.parts[1].metadata.name == "upload"
+    check decoded.parts[1].metadata.filename == some("a.txt")
+    check decoded.parts[1].metadata.headers["Content-Type"] == "text/plain"
+    check decoded.parts[1].body == "abc"
+    check decoded.parts[1].ended
 
-block preserves_boundary_lookalikes_in_part_data:
+test "preserves boundary lookalikes in part data":
   let body =
     "--" & boundary & "\r\n" &
     "Content-Disposition: form-data; name=data\r\n\r\n" &
@@ -78,14 +78,14 @@ block preserves_boundary_lookalikes_in_part_data:
   for event in decoder.finish():
     if event.kind == MultipartPartData:
       decodedData.add(event.data)
-  doAssert decodedData == "before\r\n--" & boundary & "XXafter"
+  check decodedData == "before\r\n--" & boundary & "XXafter"
 
-block accepts_empty_messages_and_parts:
+test "accepts empty messages and parts":
   var emptyMessage = initMultipartDecoder(contentType)
-  doAssert emptyMessage.feed("--" & boundary & "--").len == 0
+  check emptyMessage.feed("--" & boundary & "--").len == 0
   let ending = emptyMessage.finish()
-  doAssert ending.len == 1
-  doAssert ending[0].kind == MultipartMessageEnd
+  check ending.len == 1
+  check ending[0].kind == MultipartMessageEnd
 
   var emptyPart = initMultipartDecoder(contentType)
   let events = emptyPart.feed(
@@ -93,56 +93,56 @@ block accepts_empty_messages_and_parts:
     "Content-Disposition: form-data; name=empty\r\n\r\n" &
     "\r\n--" & boundary & "--"
   )
-  doAssert events.len == 2
-  doAssert events[0].kind == MultipartPartBegin
-  doAssert events[1].kind == MultipartPartEnd
+  check events.len == 2
+  check events[0].kind == MultipartPartBegin
+  check events[1].kind == MultipartPartEnd
   discard emptyPart.finish()
 
-block rejects_invalid_configuration:
-  doAssertRaises MummyError:
+test "rejects invalid configuration":
+  expect MummyError:
     discard initMultipartDecoder("text/plain")
-  doAssertRaises MummyError:
+  expect MummyError:
     discard initMultipartDecoder("multipart/form-data; boundary=")
-  doAssertRaises MummyError:
+  expect MummyError:
     discard initMultipartDecoder(
       "multipart/form-data; boundary=; boundary=" & boundary
     )
-  doAssertRaises MummyError:
+  expect MummyError:
     discard initMultipartDecoder(
       "multipart/form-data; boundary=" & "a".repeat(71)
     )
-  doAssertRaises MummyError:
+  expect MummyError:
     discard initMultipartDecoder("multipart/form-data; boundary=bad@boundary")
 
-block rejects_large_or_invalid_part_headers:
+test "rejects large or invalid part headers":
   var oversized = initMultipartDecoder(contentType, maxHeaderBytes = 8)
-  doAssertRaises MummyError:
+  expect MummyError:
     discard oversized.feed(multipartBody)
 
   var missingName = initMultipartDecoder(contentType)
-  doAssertRaises MummyError:
+  expect MummyError:
     discard missingName.feed(
       "--" & boundary & "\r\n" &
       "Content-Disposition: form-data; filename=a.txt\r\n\r\n"
     )
-  doAssertRaises MummyError:
+  expect MummyError:
     discard missingName.feed("more data")
 
-block accepts_extreme_header_limit_without_overflow:
+test "accepts extreme header limit without overflow":
   var decoder = initMultipartDecoder(contentType, maxHeaderBytes = high(int))
   discard decoder.feed("--" & boundary & "--")
   discard decoder.finish()
 
-block rejects_incomplete_and_reused_decoders:
+test "rejects incomplete and reused decoders":
   var incomplete = initMultipartDecoder(contentType)
   discard incomplete.feed("--" & boundary & "\r\n")
-  doAssertRaises MummyError:
+  expect MummyError:
     discard incomplete.finish()
 
   var complete = initMultipartDecoder(contentType)
   discard complete.feed("--" & boundary & "--")
   discard complete.finish()
-  doAssertRaises MummyError:
+  expect MummyError:
     discard complete.feed("")
-  doAssertRaises MummyError:
+  expect MummyError:
     discard complete.finish()

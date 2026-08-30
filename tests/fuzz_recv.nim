@@ -4,6 +4,7 @@ when not defined(mummyNoWorkers):
 include mummy
 
 import std/random
+import std/unittest
 randomize()
 
 const iterations = 1000
@@ -18,7 +19,7 @@ proc randomAsciiString(): string =
   for i in 0 ..< len:
     result &= rand(33 .. 126).char
 
-block:
+test "fuzzes header token matching":
   echo "Fuzzing headerContainsToken"
 
   proc randomToken(): string =
@@ -58,9 +59,9 @@ block:
           not headers.headerContainsToken($i, toLowerAscii(tokens[i][j])):
           echo "header: ", headers[$i]
           echo "token: ", tokens[i][j]
-          doAssert false
+          check false
 
-block:
+test "fuzzes HTTP request parsing":
   echo "Fuzzing afterRecvHttp"
 
   proc randomHeader(): string =
@@ -124,11 +125,11 @@ block:
         )
       if not closingConnection:
         let request = server.taskQueue.popFirst().request
-        doAssert request.httpMethod == httpMethod
-        doAssert request.uri == uri
-        doAssert request.headers.len == numHeaders
+        check request.httpMethod == httpMethod
+        check request.uri == uri
+        check request.headers.len == numHeaders
         for i in 0 ..< numHeaders:
-          doAssert headers[i] in request.headers
+          check headers[i] in request.headers
       server.close()
 
   block:
@@ -172,12 +173,12 @@ block:
           clientSocket,
           dataEntry
         )
-      doAssert not closingConnection
+      check not closingConnection
       let request = server.taskQueue.popFirst().request
-      doAssert request.headers.headerContainsToken(
+      check request.headers.headerContainsToken(
         "Transfer-Encoding", "chunked"
       )
-      doAssert request.body == body
+      check request.body == body
       server.close()
 
   block:
@@ -211,10 +212,10 @@ block:
           )
         if not closingConnection:
           let request = server.taskQueue.popFirst().request
-          doAssert request.headers.headerContainsToken(
+          check request.headers.headerContainsToken(
             "Content-Length", $body.len
           )
-          doAssert request.body == body
+          check request.body == body
           dec dataEntry.requestCounter
         server.close
 
@@ -233,7 +234,7 @@ block:
         )
         server.close()
 
-block:
+test "fuzzes WebSocket frame parsing":
   echo "Fuzzing afterRecvWebSocket"
 
   proc handler(request: Request) =
@@ -284,8 +285,8 @@ block:
       if not closingConnection:
         if server.taskQueue.len > 0:
           let websocket = server.taskQueue.popFirst().websocket
-          doAssert websocket.server == server
-          doAssert websocket.clientSocket == clientSocket
+          check websocket.server == server
+          check websocket.clientSocket == clientSocket
       server.close()
 
   block:
@@ -347,18 +348,18 @@ block:
             dataEntry
           )
         if closingConnection:
-          doAssert false
+          check false
 
       # The initial frame + continuations have been received
 
       let task = server.taskQueue.popFirst()
 
-      doAssert task.websocket == websocket
+      check task.websocket == websocket
 
       let update = server.websocketQueues[websocket].popFirst()
 
-      doAssert update.event == MessageEvent
-      doAssert update.message.kind == TextMessage
-      doAssert update.message.data == combined
+      check update.event == MessageEvent
+      check update.message.kind == TextMessage
+      check update.message.data == combined
 
       server.close()

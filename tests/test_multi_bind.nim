@@ -1,4 +1,4 @@
-import mummy, std/[assertions, net, strutils]
+import mummy, std/[unittest, net, strutils]
 
 const
   testPort = Port(18081)
@@ -8,11 +8,11 @@ const
 proc handler(request: Request) =
   request.respond(200, body = "Hello from Mummy!")
 
-block emptyBindings:
+test "rejects empty bindings":
   let emptyServer = newServer(handler)
-  doAssertRaises MummyError:
+  expect MummyError:
     emptyServer.serve([])
-  doAssertRaises MummyError:
+  expect MummyError:
     emptyServer.waitUntilReady(0.1)
   emptyServer.close()
 
@@ -45,20 +45,21 @@ proc requesterProc() =
   server.waitUntilReady()
   try:
     let ipv4Response = fetch("127.0.0.1", testPort, Domain.AF_INET)
-    doAssert ipv4Response.endsWith("Hello from Mummy!")
+    check ipv4Response.endsWith("Hello from Mummy!")
 
     let ipv6Response = fetch("::1", testPort, Domain.AF_INET6)
-    doAssert ipv6Response.endsWith("Hello from Mummy!")
+    check ipv6Response.endsWith("Hello from Mummy!")
 
     let otherPortResponse = fetch("127.0.0.1", otherPort, Domain.AF_INET)
-    doAssert otherPortResponse.endsWith("Hello from Mummy!")
+    check otherPortResponse.endsWith("Hello from Mummy!")
   finally:
     server.close()
 
-createThread(requesterThread, requesterProc)
-
-server.serve([
-  ("0.0.0.0", testPort),
-  ("::", testPort),
-  ("127.0.0.1", otherPort)
-])
+suite "multiple server bindings":
+  test "serves IPv4 and IPv6 addresses":
+    createThread(requesterThread, requesterProc)
+    server.serve([
+      ("0.0.0.0", testPort),
+      ("::", testPort),
+      ("127.0.0.1", otherPort)
+    ])

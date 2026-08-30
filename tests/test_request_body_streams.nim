@@ -1,4 +1,5 @@
 import mummy
+import std/unittest
 import std/[atomics, httpclient, nativesockets, os, strutils, times]
 
 const
@@ -11,7 +12,7 @@ var
   sinkCleanups: Atomic[int]
 
 proc writeFailingSink(data: string) =
-  doAssert data.len > 0
+  check data.len > 0
   raise newException(IOError, "expected sink write failure")
 
 proc handler(request: Request) =
@@ -31,18 +32,18 @@ proc requestBodyHandler(
     discard openedStreams.fetchAdd(1, moRelaxed)
     case request.path
     of "/buffer":
-      doAssert stream.buffer()
+      check stream.buffer()
     of "/default", "/chunked-default":
       discard
     of "/reject":
-      doAssert stream.reject(statusCode = 422, body = "rejected")
+      check stream.reject(statusCode = 422, body = "rejected")
     else:
-      doAssert stream.accept()
+      check stream.accept()
   of RequestBodyChunk:
-    doAssert event.data.len <= 4
-    doAssert event.bytesReceived == request.body.len + event.data.len
+    check event.data.len <= 4
+    check event.bytesReceived == request.body.len + event.data.len
     if request.path == "/reject-chunk":
-      doAssert stream.reject(statusCode = 422, body = "chunk rejected")
+      check stream.reject(statusCode = 422, body = "chunk rejected")
       return
     if request.path == "/handler-exception":
       raise newException(ValueError, "expected request body handler failure")
@@ -51,23 +52,23 @@ proc requestBodyHandler(
         writeFailingSink(event.data)
       except IOError:
         discard sinkCleanups.fetchAdd(1, moRelaxed)
-        doAssert stream.reject(
+        check stream.reject(
           statusCode = 507,
           body = "sink write failed"
         )
       return
     request.body.add(event.data)
   of RequestBodyEnd:
-    doAssert not stream.accept()
-    doAssert event.bytesReceived == request.body.len
+    check not stream.accept()
+    check event.bytesReceived == request.body.len
     request.respond(200, body = request.body)
   of RequestBodyError:
-    doAssert event.bytesReceived == request.body.len
+    check event.bytesReceived == request.body.len
     discard failedStreams.fetchAdd(1, moRelaxed)
 
-static:
+test "supports the legacy server constructor call":
   # The original positional newServer call remains source-compatible.
-  doAssert compiles(newServer(handler, nil, 1, 8192, 1024, 65536, true))
+  check compiles(newServer(handler, nil, 1, 8192, 1024, 65536, true))
 
 let server = newServer(
   handler,
@@ -130,7 +131,7 @@ proc requestRaw(request: string): string =
 proc waitFor(value: var Atomic[int], minimum: int) =
   let started = epochTime()
   while value.load(moRelaxed) < minimum:
-    doAssert epochTime() - started < 5
+    check epochTime() - started < 5
     sleep(10)
 
 var requesterThread: Thread[void]
@@ -140,21 +141,21 @@ proc requesterProc() =
 
   block:
     let client = newHttpClient()
-    doAssert client.postContent(
+    check client.postContent(
       "http://localhost:" & $port.int & "/stream",
       streamedBody
     ) == streamedBody
 
   block:
     let client = newHttpClient()
-    doAssert client.postContent(
+    check client.postContent(
       "http://localhost:" & $port.int & "/buffer",
       streamedBody
     ) == streamedBody
 
   block:
     let client = newHttpClient()
-    doAssert client.postContent(
+    check client.postContent(
       "http://localhost:" & $port.int & "/default",
       streamedBody
     ) == streamedBody
@@ -165,8 +166,8 @@ proc requesterProc() =
       "http://localhost:" & $port.int & "/reject",
       streamedBody
     )
-    doAssert response.status == "422"
-    doAssert response.body == "rejected"
+    check response.status == "422"
+    check response.body == "rejected"
 
   block:
     let client = newHttpClient()
@@ -174,8 +175,8 @@ proc requesterProc() =
       "http://localhost:" & $port.int & "/reject-chunk",
       streamedBody
     )
-    doAssert response.status == "422"
-    doAssert response.body == "chunk rejected"
+    check response.status == "422"
+    check response.body == "chunk rejected"
 
   block handler_exception:
     let client = newHttpClient()
@@ -183,7 +184,7 @@ proc requesterProc() =
       "http://localhost:" & $port.int & "/handler-exception",
       streamedBody
     )
-    doAssert response.status == "500"
+    check response.status == "500"
 
   block sink_write_failure:
     let cleanupsBefore = sinkCleanups.load(moRelaxed)
@@ -192,9 +193,9 @@ proc requesterProc() =
       "http://localhost:" & $port.int & "/sink-failure",
       streamedBody
     )
-    doAssert response.status == "507"
-    doAssert response.body == "sink write failed"
-    doAssert sinkCleanups.load(moRelaxed) == cleanupsBefore + 1
+    check response.status == "507"
+    check response.body == "sink write failed"
+    check sinkCleanups.load(moRelaxed) == cleanupsBefore + 1
 
   block:
     let response = requestRaw(
@@ -204,8 +205,8 @@ proc requesterProc() =
       "Connection: close\r\n\r\n" &
       "3\r\nabc\r\n5\r\ndefgh\r\n0\r\n\r\n"
     )
-    doAssert response.startsWith("HTTP/1.1 200")
-    doAssert response.endsWith("abcdefgh")
+    check response.startsWith("HTTP/1.1 200")
+    check response.endsWith("abcdefgh")
 
   block:
     let response = requestRaw(
@@ -215,17 +216,17 @@ proc requesterProc() =
       "Connection: close\r\n\r\n" &
       "3\r\nabc\r\n5\r\ndefgh\r\n0\r\n\r\n"
     )
-    doAssert response.startsWith("HTTP/1.1 200")
-    doAssert response.endsWith("abcdefgh")
+    check response.startsWith("HTTP/1.1 200")
+    check response.endsWith("abcdefgh")
 
   block:
     let openedBefore = openedStreams.load(moRelaxed)
     let client = newHttpClient()
-    doAssert client.postContent(
+    check client.postContent(
       "http://localhost:" & $port.int & "/empty",
       ""
     ) == ""
-    doAssert openedStreams.load(moRelaxed) == openedBefore
+    check openedStreams.load(moRelaxed) == openedBefore
 
   block:
     let
@@ -268,6 +269,8 @@ proc requesterProc() =
     waitFor(failedStreams, failuresBefore + 1)
     socket.close()
 
-createThread(requesterThread, requesterProc)
-server.serve(port)
-joinThread(requesterThread)
+suite "request body streams":
+  test "processes buffered and streamed request bodies":
+    createThread(requesterThread, requesterProc)
+    server.serve(port)
+    joinThread(requesterThread)
