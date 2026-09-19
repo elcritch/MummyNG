@@ -12,7 +12,7 @@ import std/[nativesockets, os, selectors, random]
 import webby/[httpheaders, queryparams, urls]
 import chroniclers, crunchy, zippy
 
-import ./mummy/common, ./mummy/internal
+import ./mummy/common, ./mummy/internal, ./mummy/sharedpayload
 
 from std/strutils import find, cmpIgnoreCase, toLowerAscii
 
@@ -34,7 +34,7 @@ elif defined(posix):
 
 import std/locks
 
-export Port, common, httpheaders, queryparams
+export Port, common, httpheaders, queryparams, sharedpayload
 
 template logSafely(body: untyped) =
   try:
@@ -287,6 +287,7 @@ type
     isResponseBodyOpen: bool
     responseBodyCompletion: ResponseBodyEventKind
     buffer1, buffer2: string
+    sharedPayload: SharedPayload
     bytesSent: int
     responseBody: ResponseBodyStream
 
@@ -512,6 +513,28 @@ proc send*(
     queueWasEmpty = websocket.server.sendQueue.len == 0
     websocket.server.sendQueue.addLast(move encodedFrame)
 
+  if queueWasEmpty:
+    triggerEvent(websocket.server.sendQueued)
+
+proc sendShared*(websocket: WebSocket; data: SharedPayload;
+                 kind = BinaryMessage) {.raises: [], gcsafe.} =
+  ## Queue immutable shared bytes with an independent offset per connection.
+  ## An atomic owner keeps the payload alive through partial sends, disconnects
+  ## and transfers from publisher/worker threads to the socket thread.
+  var encodedFrame = OutgoingBuffer()
+  encodedFrame.clientSocket = websocket.clientSocket
+  encodedFrame.clientId = websocket.clientId
+  let opcode = case kind
+    of TextMessage: 0x1'u8
+    of BinaryMessage: 0x2'u8
+    of Ping: 0x9'u8
+    of Pong: 0xA'u8
+  encodedFrame.buffer1 = encodeFrameHeader(opcode, data.len)
+  encodedFrame.sharedPayload = data
+  var queueWasEmpty: bool
+  withLock websocket.server.sendQueueLock:
+    queueWasEmpty = websocket.server.sendQueue.len == 0
+    websocket.server.sendQueue.addLast(move encodedFrame)
   if queueWasEmpty:
     triggerEvent(websocket.server.sendQueued)
 
@@ -2023,7 +2046,8 @@ proc afterSend(
   while dataEntry.outgoingBuffers.len > 0:
     let
       outgoingBuffer = dataEntry.outgoingBuffers.peekFirst()
-      totalBytes = outgoingBuffer.buffer1.len + outgoingBuffer.buffer2.len
+      totalBytes = outgoingBuffer.buffer1.len + outgoingBuffer.buffer2.len +
+        outgoingBuffer.sharedPayload.len
     if outgoingBuffer.bytesSent != totalBytes:
       break
 
@@ -2471,7 +2495,8 @@ proc loopForever(server: Server) {.raises: [OSError, IOSelectorsException].} =
         if Write in readyKey.events:
           let
             outgoingBuffer = dataEntry.outgoingBuffers.peekFirst()
-            totalBytes = outgoingBuffer.buffer1.len + outgoingBuffer.buffer2.len
+            totalBytes = outgoingBuffer.buffer1.len + outgoingBuffer.buffer2.len +
+              outgoingBuffer.sharedPayload.len
           if outgoingBuffer.bytesSent == totalBytes:
             sentTo.add(readyKey.fd.SocketHandle)
           else:
@@ -2480,6 +2505,14 @@ proc loopForever(server: Server) {.raises: [OSError, IOSelectorsException].} =
                 readyKey.fd.SocketHandle.send(
                   outgoingBuffer.buffer1[outgoingBuffer.bytesSent].addr,
                   (outgoingBuffer.buffer1.len - outgoingBuffer.bytesSent).cint,
+                  when defined(MSG_NOSIGNAL): MSG_NOSIGNAL else: 0
+                )
+              elif outgoingBuffer.sharedPayload.len > 0:
+                let payloadPos =
+                  outgoingBuffer.bytesSent - outgoingBuffer.buffer1.len
+                readyKey.fd.SocketHandle.send(
+                  outgoingBuffer.sharedPayload.dataAt(payloadPos),
+                  (outgoingBuffer.sharedPayload.len - payloadPos).cint,
                   when defined(MSG_NOSIGNAL): MSG_NOSIGNAL else: 0
                 )
               else:
