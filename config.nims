@@ -3,7 +3,10 @@ when (NimMajor, NimMinor, NimPatch) < (2, 0, 0):
   --mm:orc
 
 when defined(features.mummy.testing) and
-    not defined(chroniclers.logBackend) and
-    not defined(chroniclersLogBackend) and
-    not defined(chroniclersBackendModule):
-  switch("define", "chroniclers.logBackend=chronicles")
+    not defined(chroniclers.logBackendChronicles) and
+    not defined(chroniclers.logBackendStd) and
+    not defined(chroniclers.logBackendCustom) and
+    not defined(chroniclers.logBackendNone) and
+    not defined(features.chroniclers.chronicles) and
+    not defined(features.chroniclers.std):
+  switch("define", "chroniclers.logBackendChronicles")

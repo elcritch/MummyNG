@@ -200,8 +200,8 @@ Mummy emits structured log events through
 default, and applications select the backend for the whole build:
 
 ```sh
-nim c -d:chroniclers.logBackend=std app.nim
-nim c -d:chroniclers.logBackend=none app.nim
+nim c -d:chroniclers.logBackendStd app.nim
+nim c -d:chroniclers.logBackendNone app.nim
 ```
 
 To use Chronicles, require the Mummy feature in your package:
