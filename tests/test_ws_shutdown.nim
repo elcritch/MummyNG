@@ -24,6 +24,7 @@ var
   peers: array[2, WebSocket]
   opened: Atomic[int]
   stopped: Atomic[bool]
+  transportErrors: Atomic[int]
 
 proc liveAllocations(): int =
   for name, value in fieldPairs(getAllocStats()):
@@ -50,6 +51,8 @@ proc wsEvent(ws: WebSocket; event: WebSocketEvent; message: Message) {.gcsafe.} 
     doAssert index < peers.len
     peers[index] = ws
     opened.store(index + 1, moRelease)
+  elif event == ErrorEvent:
+    discard transportErrors.fetchAdd(1, moRelease)
 
 proc serve(server: Server) {.thread.} =
   server.serve(Port(0), "127.0.0.1")
@@ -80,6 +83,7 @@ proc connectSlowPeer(port: Port): Socket =
 proc runShutdown() =
   opened.store(0, moRelaxed)
   stopped.store(false, moRelaxed)
+  transportErrors.store(0, moRelaxed)
   let server = newServer(handler, wsEvent, workerThreads = 1)
   var servingThread: Thread[Server]
   createThread(servingThread, serve, server)
@@ -106,8 +110,10 @@ proc runShutdown() =
       history.add(newSharedPayload(data))
       for peer in peers:
         peer.sendShared(history[^1])
-    for payload in history:
+    for index, payload in history:
       privateAccess(typeof(payload.storage[]))
+      echo "payload ", index, " owners = ", payload.storage.owners.load(moAcquire),
+        ", transport errors = ", transportErrors.load(moAcquire)
       doAssert payload.storage.owners.load(moAcquire) >= peers.len + 1,
         "each peer must retain a queued owner"
     # Drop every publisher/history owner before stopping the selector.
