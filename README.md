@@ -155,8 +155,8 @@ nim c -d:release tests/profile_ws_memory.nim
 ./tests/profile_ws_memory copied
 ```
 
-The live shutdown regression test leaves two loopback clients with partially
-sent shared frames, drops the application owners, then verifies all Nim
+The live shutdown regression test leaves two loopback clients with queued
+shared frames, drops the application owners, then verifies all Nim
 allocations return to the warmed-up baseline after the server and workers stop:
 
 ```sh
