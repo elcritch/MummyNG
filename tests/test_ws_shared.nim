@@ -1,6 +1,7 @@
 # nim c -r -d:release --path:src tests/test_ws_shared.nim
 import std/[deques, importutils, nativesockets, strutils, unittest]
 import mummy
+from mummy/sharedpayload {.all.} import dataAt
 
 privateAccess(WebSocket)
 privateAccess(Server)
@@ -9,7 +10,7 @@ proc handler(request: Request) {.gcsafe.} = discard
 
 proc matches(payload: SharedPayload; expected: string): bool =
   payload.len == expected.len and (expected.len == 0 or
-    equalMem(unsafeAddr payload[0], unsafeAddr expected[0], expected.len))
+    equalMem(payload.dataAt(0), unsafeAddr expected[0], expected.len))
 
 proc copyOnThread(payload: SharedPayload) {.thread.} =
   for _ in 0 ..< 10_000:
@@ -22,7 +23,7 @@ suite "shared WebSocket payloads":
     var input = "snapshot".repeat(1024)
     var first = newSharedPayload(input)
     var second = first
-    doAssert unsafeAddr(first[0]) == unsafeAddr(second[0])
+    doAssert first.dataAt(0) == second.dataAt(0)
     input[0] = '!'
     check first.matches("snapshot".repeat(1024))
     first = newSharedPayload("replacement")
@@ -32,29 +33,20 @@ suite "shared WebSocket payloads":
     second = move first
     check second.matches("replacement")
 
-  test "indexed bytes are read-only borrows with checked bounds":
-    var payload = newSharedPayload("abc")
-    check payload[0] == 'a'
-    check payload[2] == 'c'
-    static:
-      doAssert not compiles(payload[0] = 'x')
-      doAssert not compiles(payload.dataAt(0))
-    expect IndexDefect:
-      discard payload[-1]
-    expect IndexDefect:
-      discard payload[payload.len]
+  test "private pointer access supports byte offsets":
+    let payload = newSharedPayload("abc")
+    check cast[ptr char](payload.dataAt(0))[] == 'a'
+    check cast[ptr char](payload.dataAt(2))[] == 'c'
 
   test "empty values can be copied, moved and destroyed":
     var payload = newSharedPayload("")
     var copy = payload
+    doAssert payload.dataAt(0) == copy.dataAt(0)
     payload = SharedPayload()
     check copy.len == 0
     copy = move payload
     check copy.len == 0
-    expect IndexDefect:
-      discard copy[0]
-    expect IndexDefect:
-      discard newSharedPayload("")[0]
+    check copy.dataAt(0) == nil
 
   test "independent owners may be copied and released on multiple threads":
     var payload = newSharedPayload("thread-owned bytes")
@@ -69,7 +61,7 @@ suite "shared WebSocket payloads":
     defer: server.close()
     let expected = "snapshot".repeat(32 * 1024)
     var history = @[newSharedPayload(expected)]
-    let address = unsafeAddr history[0][0]
+    let address = history[0].dataAt(0)
     for i in 0 ..< 1024:
       let ws = WebSocket(server: server, clientSocket: SocketHandle(i + 1),
                          clientId: uint64(i + 1))
@@ -80,7 +72,7 @@ suite "shared WebSocket payloads":
       let frame = server.sendQueue.popFirst()
       privateAccess(typeof(frame[]))
       check frame.buffer2.len == 0
-      doAssert unsafeAddr(frame.sharedPayload[0]) == address
+      doAssert frame.sharedPayload.dataAt(0) == address
       check frame.sharedPayload.matches(expected)
 
   when not defined(useMalloc):

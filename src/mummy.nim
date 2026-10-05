@@ -12,7 +12,8 @@ import std/[nativesockets, os, selectors, random]
 import webby/[httpheaders, queryparams, urls]
 import chroniclers, crunchy, zippy
 
-import ./mummy/common, ./mummy/internal, ./mummy/sharedpayload
+import ./mummy/common, ./mummy/internal
+import ./mummy/sharedpayload {.all.}
 
 from std/strutils import find, cmpIgnoreCase, toLowerAscii
 
@@ -34,7 +35,9 @@ elif defined(posix):
 
 import std/locks
 
-export Port, common, httpheaders, queryparams, sharedpayload
+export Port, common, httpheaders, queryparams
+# Keep the transport's private payload helpers out of the public re-exports.
+export sharedpayload.SharedPayload, sharedpayload.newSharedPayload, sharedpayload.len
 
 template logSafely(body: untyped) =
   try:
@@ -2511,7 +2514,7 @@ proc loopForever(server: Server) {.raises: [OSError, IOSelectorsException].} =
                 let payloadPos =
                   outgoingBuffer.bytesSent - outgoingBuffer.buffer1.len
                 readyKey.fd.SocketHandle.send(
-                  unsafeAddr outgoingBuffer.sharedPayload[payloadPos],
+                  outgoingBuffer.sharedPayload.dataAt(payloadPos),
                   (outgoingBuffer.sharedPayload.len - payloadPos).cint,
                   when defined(MSG_NOSIGNAL): MSG_NOSIGNAL else: 0
                 )

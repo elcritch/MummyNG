@@ -139,11 +139,8 @@ applications must still implement their own flow control. Separate owners can
 be used on different threads; concurrent assignment to the same owner variable
 still requires synchronization.
 
-Read an individual byte with `payload[index]`, which returns a read-only
-`lent char` backed by the owner. Indices outside `0 ..< payload.len` raise
-`IndexDefect`, including for empty payloads. Keep the owner alive and unchanged
-while borrowing a byte. The former `dataAt` pointer accessor is now private;
-ordinary payload inspection no longer exposes mutable raw storage.
+`SharedPayload` exposes its length but keeps its bytes private. The transport
+uses an internal `dataAt` pointer helper; it is no longer part of the public API.
 
 See [`examples/shared_websockets.nim`](examples/shared_websockets.nim) for a
 broadcast server. To compare queued memory for 1,024 recipients of a 256 KiB

@@ -30,18 +30,13 @@ proc len*(payload: SharedPayload): int {.inline.} =
   if payload.storage == nil: 0 else: payload.storage.size
 
 proc dataAt(payload: SharedPayload; offset: int): pointer {.inline.} =
+  # Transport-only borrowed pointer; the owner must outlive its use.
+  # Allow the end offset for empty payloads without dereferencing it.
+  assert offset >= 0 and offset <= payload.len
   if payload.storage != nil:
     cast[pointer](cast[uint](payload.storage) + uint(sizeof(PayloadStorage) + offset))
   else:
     nil
-
-proc `[]`*(payload: SharedPayload; index: int): lent char {.inline.} =
-  ## Borrow one read-only byte from this owner without copying payload storage.
-  ## Raises IndexDefect for an invalid index, including an empty payload.
-  ## The borrowed byte must not outlive the owner or its replacement.
-  if index < 0 or index >= payload.len:
-    raise newException(IndexDefect, "SharedPayload index out of bounds")
-  cast[ptr char](payload.dataAt(index))[]
 
 proc newSharedPayload*(data: string): SharedPayload =
   ## Copy once into shared allocation; later copies retain only this owner.
