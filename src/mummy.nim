@@ -2511,7 +2511,7 @@ proc loopForever(server: Server) {.raises: [OSError, IOSelectorsException].} =
                 let payloadPos =
                   outgoingBuffer.bytesSent - outgoingBuffer.buffer1.len
                 readyKey.fd.SocketHandle.send(
-                  outgoingBuffer.sharedPayload.dataAt(payloadPos),
+                  unsafeAddr outgoingBuffer.sharedPayload[payloadPos],
                   (outgoingBuffer.sharedPayload.len - payloadPos).cint,
                   when defined(MSG_NOSIGNAL): MSG_NOSIGNAL else: 0
                 )

@@ -57,4 +57,7 @@ jobs:
     - run: nim c --mm:atomicArc -r -d:useMalloc tests/test_ws_shared.nim
     - run: nim c -r -d:useMalloc tests/test_ws_transport.nim
     - run: nim c --mm:atomicArc -r -d:useMalloc tests/test_ws_transport.nim
+    - run: nim c --mm:orc -r -d:useMalloc tests/test_ws_shutdown.nim
+    - run: nim c --mm:orc -r tests/test_ws_shutdown.nim
+    - run: nim c --mm:atomicArc -r -d:useMalloc tests/test_ws_shutdown.nim
     - run: nim c -r -d:useMalloc -d:mummyNoWorkers tests/fuzz_recv.nim
