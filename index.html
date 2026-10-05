@@ -28,7 +28,7 @@
     <label for="nav-toggle" id="nav-overlay"></label>
     <div class="container">
       <h1 class="title">Index</h1>
-      Modules: <a href="mummy.html">mummy</a>, <a href="mummy/common.html">mummy/common</a>, <a href="mummy/internal.html">mummy/internal</a>, <a href="routers.html">routers</a>, <a href="sse.html">sse</a>.<br/><p /><h2>API symbols</h2>
+      Modules: <a href="mummy.html">mummy</a>, <a href="mummy/common.html">mummy/common</a>, <a href="mummy/internal.html">mummy/internal</a>, <a href="mummy/sharedpayload.html">mummy/sharedpayload</a>, <a href="routers.html">routers</a>, <a href="sse.html">sse</a>.<br/><p /><h2>API symbols</h2>
 <dl><dt><a name="%60%24%60" href="#%60%24%60"><span>`$`:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
           data-doc-search-tag="mummy: proc `$`(request: Request): string" href="mummy.html#%24%2CRequest">mummy: proc `$`(request: Request): string</a></li>
@@ -99,6 +99,10 @@
 <li><a class="reference external"
           data-doc-search-tag="internal: template currentExceptionAsMummyError(): untyped" href="mummy/internal.html#currentExceptionAsMummyError.t">internal: template currentExceptionAsMummyError(): untyped</a></li>
           </ul></dd>
+<dt><a name="dataAt" href="#dataAt"><span>dataAt:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="sharedpayload: proc dataAt(payload: SharedPayload; offset: int): pointer" href="mummy/sharedpayload.html#dataAt%2CSharedPayload%2Cint">sharedpayload: proc dataAt(payload: SharedPayload; offset: int): pointer</a></li>
+          </ul></dd>
 <dt><a name="delete" href="#delete"><span>delete:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
           data-doc-search-tag="routers: proc delete(router: var Router; route: string | static string;
@@ -155,6 +159,10 @@
 <li><a class="reference external"
           data-doc-search-tag="common: enum HttpVersion" href="mummy/common.html#HttpVersion">common: enum HttpVersion</a></li>
           </ul></dd>
+<dt><a name="len" href="#len"><span>len:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="sharedpayload: proc len(payload: SharedPayload): int" href="mummy/sharedpayload.html#len%2CSharedPayload">sharedpayload: proc len(payload: SharedPayload): int</a></li>
+          </ul></dd>
 <dt><a name="Message" href="#Message"><span>Message:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
           data-doc-search-tag="mummy: object Message" href="mummy.html#Message">mummy: object Message</a></li>
@@ -186,6 +194,10 @@
           requestBodyHandler: RequestBodyHandler = nil;
           requestBodyChunkSize: Positive = 64 * 1024;
           responseBodyHandler: ResponseBodyHandler = nil): Server</a></li>
+          </ul></dd>
+<dt><a name="newSharedPayload" href="#newSharedPayload"><span>newSharedPayload:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="sharedpayload: proc newSharedPayload(data: string): SharedPayload" href="mummy/sharedpayload.html#newSharedPayload%2Cstring">sharedpayload: proc newSharedPayload(data: string): SharedPayload</a></li>
           </ul></dd>
 <dt><a name="OpenEvent" href="#OpenEvent"><span>OpenEvent:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
@@ -335,6 +347,10 @@
           <li><a class="reference external"
           data-doc-search-tag="sse: proc send(stream: ResponseBodyStream; event: SseEvent): bool" href="sse.html#send%2CResponseBodyStream%2CSseEvent">sse: proc send(stream: ResponseBodyStream; event: SseEvent): bool</a></li>
           </ul></dd>
+<dt><a name="sendShared" href="#sendShared"><span>sendShared:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="mummy: proc sendShared(websocket: WebSocket; data: SharedPayload; kind = BinaryMessage)" href="mummy.html#sendShared%2CWebSocket%2CSharedPayload">mummy: proc sendShared(websocket: WebSocket; data: SharedPayload; kind = BinaryMessage)</a></li>
+          </ul></dd>
 <dt><a name="serve" href="#serve"><span>serve:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
           data-doc-search-tag="mummy: proc serve(server: Server; bindings: openArray[(string, Port)])" href="mummy.html#serve%2CServer%2CopenArray%5B%5D">mummy: proc serve(server: Server; bindings: openArray[(string, Port)])</a></li>
@@ -344,6 +360,10 @@
 <dt><a name="Server" href="#Server"><span>Server:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
           data-doc-search-tag="mummy: type Server" href="mummy.html#Server">mummy: type Server</a></li>
+          </ul></dd>
+<dt><a name="SharedPayload" href="#SharedPayload"><span>SharedPayload:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="sharedpayload: object SharedPayload" href="mummy/sharedpayload.html#SharedPayload">sharedpayload: object SharedPayload</a></li>
           </ul></dd>
 <dt><a name="SseEvent" href="#SseEvent"><span>SseEvent:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
@@ -407,7 +427,7 @@
       <div class="twelve-columns footer">
         <span class="nim-sprite"></span>
         <br>
-        <small style="color: var(--hint);">Made with Nim. Generated: 2026-10-05 16:11:34 UTC</small>
+        <small style="color: var(--hint);">Made with Nim. Generated: 2026-10-05 16:38:27 UTC</small>
       </div>
     </div>
   </div>

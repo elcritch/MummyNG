@@ -1,0 +1,5 @@
+nimTitle	sharedpayload	mummy/sharedpayload.html	module src/mummy/sharedpayload		0
+nim	SharedPayload	mummy/sharedpayload.html#SharedPayload	object SharedPayload		10
+nim	len	mummy/sharedpayload.html#len,SharedPayload	proc len(payload: SharedPayload): int		28
+nim	dataAt	mummy/sharedpayload.html#dataAt,SharedPayload,int	proc dataAt(payload: SharedPayload; offset: int): pointer		32
+nim	newSharedPayload	mummy/sharedpayload.html#newSharedPayload,string	proc newSharedPayload(data: string): SharedPayload		41
