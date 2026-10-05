@@ -52,4 +52,9 @@ jobs:
     - run: nim c -r -d:useMalloc tests/test_http2.nim
     - run: nim c -r -d:useMalloc tests/test_multi_bind.nim
     - run: nim c -r -d:useMalloc tests/test_websockets.nim
+    - run: nim c -r -d:useMalloc tests/test_ws_shared.nim
+    - run: nim c -r tests/test_ws_shared.nim
+    - run: nim c --mm:atomicArc -r -d:useMalloc tests/test_ws_shared.nim
+    - run: nim c -r -d:useMalloc tests/test_ws_transport.nim
+    - run: nim c --mm:atomicArc -r -d:useMalloc tests/test_ws_transport.nim
     - run: nim c -r -d:useMalloc -d:mummyNoWorkers tests/fuzz_recv.nim

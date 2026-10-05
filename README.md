@@ -118,6 +118,37 @@ server.serve([
 ])
 ```
 
+## Shared WebSocket broadcasts
+
+Use `newSharedPayload` and `sendShared` when many clients receive identical
+bytes. The constructor copies the input once; copying a `SharedPayload` only
+retains an atomic owner. Each connection keeps an independent frame header and
+send offset, while the bytes live until the last queued send or application
+owner is released, including after partial writes, disconnects, and shutdown.
+
+```nim
+proc broadcast(clients: openArray[WebSocket]; data: string) =
+  let payload = newSharedPayload(data)
+  for client in clients:
+    client.sendShared(payload, BinaryMessage)
+```
+
+`sendShared` defaults to `BinaryMessage`. The existing string-based `send` API
+is unchanged. Sharing payload storage does not bound a slow client's queue;
+applications must still implement their own flow control. Separate owners can
+be used on different threads; concurrent assignment to the same owner variable
+still requires synchronization.
+
+See [`examples/shared_websockets.nim`](examples/shared_websockets.nim) for a
+broadcast server. To compare queued memory for 1,024 recipients of a 256 KiB
+message without opening sockets:
+
+```sh
+nim c -d:release tests/profile_ws_memory.nim
+./tests/profile_ws_memory shared
+./tests/profile_ws_memory copied
+```
+
 ## Streaming uploads
 
 Existing applications keep the traditional behavior: Mummy buffers each body
