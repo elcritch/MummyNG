@@ -139,6 +139,9 @@ applications must still implement their own flow control. Separate owners can
 be used on different threads; concurrent assignment to the same owner variable
 still requires synchronization.
 
+`SharedPayload` exposes its length but keeps its bytes private. The transport
+uses an internal `dataAt` pointer helper; it is no longer part of the public API.
+
 See [`examples/shared_websockets.nim`](examples/shared_websockets.nim) for a
 broadcast server. To compare queued memory for 1,024 recipients of a 256 KiB
 message without opening sockets:
@@ -147,6 +150,15 @@ message without opening sockets:
 nim c -d:release tests/profile_ws_memory.nim
 ./tests/profile_ws_memory shared
 ./tests/profile_ws_memory copied
+```
+
+The live shutdown regression test leaves two loopback clients with queued
+shared frames, drops the application owners, then verifies all Nim
+allocations return to the warmed-up baseline after the server and workers stop:
+
+```sh
+nim c --mm:orc -r -d:useMalloc tests/test_ws_shutdown.nim
+nim c --mm:atomicArc -r -d:useMalloc tests/test_ws_shutdown.nim
 ```
 
 ## Streaming uploads
