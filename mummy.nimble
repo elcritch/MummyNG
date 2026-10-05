@@ -1,4 +1,4 @@
-version     = "0.6.3"
+version     = "0.6.4"
 author      = "Ryan Oldenburg / Jaremy Creechley"
 description = "Multithreaded HTTP + WebSocket server"
 license     = "MIT"
