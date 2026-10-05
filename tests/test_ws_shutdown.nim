@@ -110,23 +110,22 @@ proc runShutdown() =
       history.add(newSharedPayload(data))
       for peer in peers:
         peer.sendShared(history[^1])
-    for index, payload in history:
-      privateAccess(typeof(payload.storage[]))
-      echo "payload ", index, " owners = ", payload.storage.owners.load(moAcquire),
-        ", transport errors = ", transportErrors.load(moAcquire)
-      doAssert payload.storage.owners.load(moAcquire) >= peers.len + 1,
-        "each peer must retain a queued owner"
+    # Establish that both connections are transmitting before checking the
+    # backlog. A socket may accept a whole leading frame despite its requested
+    # buffer size, so require pending owners of the final frame specifically.
+    for socket in [first, second]:
+      let prefix = socket.recv(11, timeout = timeoutMs)
+      doAssert prefix.len == 11
+      doAssert prefix[0] == '\x82' and prefix[1] == '\x7f'
+      doAssert prefix[10] == 'x'
+    doAssert transportErrors.load(moAcquire) == 0,
+      "slow peers must stay connected until server shutdown"
+    privateAccess(typeof(history[^1].storage[]))
+    let owners = history[^1].storage.owners.load(moAcquire)
+    doAssert owners >= peers.len + 1,
+      "final payload must remain queued for both slow peers; owners = " & $owners
     # Drop every publisher/history owner before stopping the selector.
     history.setLen(0)
-
-  # Reading the frame header and one payload byte proves both socket queues
-  # reached partial payload writes. No peer drains the remaining 8 MiB frame
-  # (or the three frames behind it); both TCP buffers are limited to 4 KiB.
-  for socket in [first, second]:
-    let prefix = socket.recv(11, timeout = timeoutMs)
-    doAssert prefix.len == 11
-    doAssert prefix[0] == '\x82' and prefix[1] == '\x7f'
-    doAssert prefix[10] == 'x'
 
   server.close()
   closed = true

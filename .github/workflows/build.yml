@@ -37,6 +37,9 @@ jobs:
     - name: Install dependencies
       run: atlas install -t:8 --features:testing
 
+    - run: nim c --mm:orc -r -d:useMalloc tests/test_ws_shutdown.nim
+    - run: nim c --mm:orc -r tests/test_ws_shutdown.nim
+    - run: nim c --mm:atomicArc -r -d:useMalloc tests/test_ws_shutdown.nim
     - run: nim c -r -d:useMalloc tests/test.nim
     - run: nim c -r -d:useMalloc tests/test_http.nim
     - run: nim c -r -d:useMalloc tests/test_request_body_streams.nim
@@ -57,7 +60,4 @@ jobs:
     - run: nim c --mm:atomicArc -r -d:useMalloc tests/test_ws_shared.nim
     - run: nim c -r -d:useMalloc tests/test_ws_transport.nim
     - run: nim c --mm:atomicArc -r -d:useMalloc tests/test_ws_transport.nim
-    - run: nim c --mm:orc -r -d:useMalloc tests/test_ws_shutdown.nim
-    - run: nim c --mm:orc -r tests/test_ws_shutdown.nim
-    - run: nim c --mm:atomicArc -r -d:useMalloc tests/test_ws_shutdown.nim
     - run: nim c -r -d:useMalloc -d:mummyNoWorkers tests/fuzz_recv.nim
