@@ -6,6 +6,7 @@ Fork of original Mummy with goal of maintaining it while adding missing features
 
 - Bind multiple IP addresses and ports, including IPv6.
 - Stream incoming request bodies with bounded memory and backpressure.
+- Serve HTTPS and WSS natively through OpenSSL 3 (optional, see [TLS.md](TLS.md)).
 
 ## Details 
 
@@ -222,6 +223,19 @@ rejected. The [`basic_sse.nim`](examples/basic_sse.nim) example is runnable with
 
 ```sh
 nim c --threads:on --mm:orc --path:src -r examples/basic_sse.nim
+```
+
+## HTTPS and WSS
+
+Pass a `TlsConfig` to `newServer` and build with `-d:ssl -d:sslVersion=3` to
+serve HTTPS and WSS without a proxy in front. Plain HTTP stays the default, and
+every feature above works the same over TLS. [TLS.md](TLS.md) covers the
+certificate format, the handshake and shutdown limits, and the tests.
+
+```nim
+let server = newServer(handler, tls = TlsConfig(
+  certificateFile: "chain.pem",
+  privateKeyFile: "key.pem"))
 ```
 
 ## Logging
