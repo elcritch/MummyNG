@@ -485,6 +485,24 @@ proc setNoDelay(socket: SocketHandle) {.raises: [].} =
     logSafely:
       error "Error setting TCP_NODELAY", exception = e.msg
 
+# Batch complete small frames without delaying the selector's next write.
+const
+  MaxJoinedFrameBytes = 64 * 1024
+  MaxJoinedBufferBytes = 256 * 1024
+
+proc joinFrame(queue: var Deque[OutgoingBuffer], frame: OutgoingBuffer): bool {.raises: [].} =
+  # A shared payload is written from its own buffer after buffer1, so it never joins.
+  if queue.len == 0 or frame.isCloseFrame or frame.closeConnection or frame.buffer2.len > 0 or
+      frame.sharedPayload.len > 0:
+    return false
+  let last = queue.peekLast()
+  if last.isCloseFrame or last.closeConnection or last.isWebSocketUpgrade or
+      last.buffer2.len > 0 or last.sharedPayload.len > 0 or
+      last.buffer1.len + frame.buffer1.len > MaxJoinedBufferBytes:
+    return false
+  last.buffer1.add frame.buffer1
+  true
+
 proc send*(
   websocket: WebSocket,
   data: sink string,
@@ -506,7 +524,10 @@ proc send*(
   of Pong:
     encodedFrame.buffer1 = encodeFrameHeader(0xA, data.len)
 
-  encodedFrame.buffer2 = move data
+  if data.len <= MaxJoinedFrameBytes:
+    encodedFrame.buffer1.add data
+  else:
+    encodedFrame.buffer2 = move data
 
   var queueWasEmpty: bool
   withLock websocket.server.sendQueueLock:
@@ -2404,7 +2425,7 @@ proc loopForever(server: Server) {.raises: [OSError, IOSelectorsException].} =
                   debug "Dropped WebSocket message",
                     reason = "connection closing",
                     clientSocket = cast[uint](encodedFrame.clientSocket)
-              else:
+              elif not joinFrame(clientDataEntry.outgoingBuffers, encodedFrame):
                 clientDataEntry.outgoingBuffers.addLast(encodedFrame)
                 if encodedFrame.isCloseFrame:
                   clientDataEntry.closeFrameQueuedAt = epochTime()
