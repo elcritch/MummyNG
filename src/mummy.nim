@@ -34,7 +34,9 @@ elif defined(posix):
 
 import std/locks
 
-export Port, common, httpheaders, queryparams, sharedpayload, TlsConfig
+export Port, common, httpheaders, queryparams, TlsConfig
+# Keep the transport's private payload helpers out of the public re-exports.
+export sharedpayload.SharedPayload, sharedpayload.newSharedPayload, sharedpayload.len
 
 template logSafely(body: untyped) =
   try:
