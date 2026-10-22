@@ -3,11 +3,12 @@ import std/[nativesockets, selectors]
 import ./common
 
 type
-  TlsConfig* = ref object
-    certificateFile*, privateKeyFile*: string
-    handshakeTimeoutMs*: int = 10_000
-    shutdownTimeoutMs*: int = 1_000
-    maxPendingHandshakes*: int = 256
+  TlsConfig* = ref object ## HTTPS/WSS settings passed to `newServer`; `nil` disables TLS.
+    certificateFile*: string ## PEM certificate chain, leaf first.
+    privateKeyFile*: string ## Matching unencrypted PEM private key.
+    handshakeTimeoutMs*: int = 10_000 ## Handshake deadline in milliseconds; must be positive.
+    shutdownTimeoutMs*: int = 1_000 ## TLS shutdown deadline in milliseconds; must be positive.
+    maxPendingHandshakes*: int = 256 ## Maximum concurrent handshakes; must be positive.
   TlsWait* = enum
     tlsReady, tlsRead, tlsWrite, tlsClosed, tlsFailed
   TlsPhase* = enum
@@ -89,7 +90,7 @@ when defined(ssl):
     connection.writeBuffer = nil
     connection.writeLength = 0
 
-  proc classify*(connection: TlsConnection, count: cint): TlsWait {.raises: [].} =
+  proc classify(connection: TlsConnection, count: cint): TlsWait {.raises: [].} =
     if count > 0: return tlsReady
     let error = block:
       when defined(mummyTlsTest):

@@ -1,6 +1,29 @@
 include ../src/mummy
 
 block:
+  # Both transports use the same cursor for headers, owned bodies and shared
+  # payloads. Exercise every partial-write offset and the completed boundary.
+  for output in [OutgoingBuffer(),
+                 OutgoingBuffer(buffer1: "header"),
+                 OutgoingBuffer(buffer2: "body"),
+                 OutgoingBuffer(sharedPayload: newSharedPayload("shared")),
+                 OutgoingBuffer(buffer1: "header", buffer2: "body"),
+                 OutgoingBuffer(buffer1: "header", sharedPayload: newSharedPayload("shared"))]:
+    var unsent = output.buffer1
+    if output.sharedPayload.len > 0: unsent.add "shared"
+    unsent.add output.buffer2
+    while unsent.len > 0:
+      let segment = output.nextSegment()
+      doAssert segment.isSome
+      let (buffer, length) = segment.get
+      doAssert length > 0 and length <= unsent.len
+      doAssert cast[ptr UncheckedArray[char]](buffer)[0] == unsent[0]
+      # A one-byte write must advance within a segment without skipping bytes.
+      inc output.bytesSent
+      unsent = unsent[1 .. ^1]
+    doAssert output.nextSegment().isNone
+
+block:
   var queue = initDeque[OutgoingBuffer]()
   let first = OutgoingBuffer(buffer1: "first", bytesSent: 2)
   queue.addLast(first)

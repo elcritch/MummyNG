@@ -255,6 +255,22 @@ proc exercise(port: Port, ctx: SslContext) =
     socket.quietClose()
 
   block:
+    # HTTP/1.0 ends a response stream with an empty completion buffer rather
+    # than a chunk terminator. Finish it without indexing empty storage, then
+    # check that the server is still serving other clients.
+    let socket = dial(port, ctx)
+    socket.send("GET /stream-out HTTP/1.0\r\nHost: localhost\r\n\r\n")
+    let head = socket.readHead()
+    doAssert head.startsWith("HTTP/1.1 200"), head
+    doAssert "transfer-encoding:" notin head.toLowerAscii, head
+    var expected = ""
+    for i in 0 ..< streamedChunks: expected.add streamedChunk(i)
+    doAssert socket.exact(expected.len) == expected, "corrupt HTTP/1.0 stream"
+    doAssert socket.recv(1, timeoutMs).len == 0, "HTTP/1.0 stream did not close"
+    socket.quietClose()
+    doAssert get(port, ctx, "/healthz") == "ok"
+
+  block:
     let socket = websocket(port, ctx)
     var batch = ""
     for i in 0 ..< 128: batch.add frame("sequence-" & $i)

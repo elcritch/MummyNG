@@ -12,7 +12,7 @@ import std/[nativesockets, os, selectors, random]
 import webby/[httpheaders, queryparams, urls]
 import chroniclers, crunchy, zippy
 
-import ./mummy/common, ./mummy/internal
+import ./mummy/common, ./mummy/internal, ./mummy/tls
 import ./mummy/sharedpayload {.all.}
 
 from std/strutils import find, cmpIgnoreCase, toLowerAscii
@@ -35,7 +35,7 @@ elif defined(posix):
 
 import std/locks
 
-export Port, common, httpheaders, queryparams
+export Port, common, httpheaders, queryparams, TlsConfig
 # Keep the transport's private payload helpers out of the public re-exports.
 export sharedpayload.SharedPayload, sharedpayload.newSharedPayload, sharedpayload.len
 
@@ -2110,6 +2110,21 @@ proc processRequestBodyControl(
             clientSocket = cast[uint](control.stream.clientSocket),
             bytesReceived = dataEntry.bytesReceived
 
+proc nextSegment(
+  output: OutgoingBuffer
+): Option[tuple[buffer: pointer, length: int]] {.inline, raises: [].} =
+  ## Returns none for a completed buffer, including an empty stream terminator.
+  ## Only take an address after checking that the segment has bytes remaining.
+  var pos = output.bytesSent
+  if pos < output.buffer1.len:
+    return some((pointer(addr output.buffer1[pos]), output.buffer1.len - pos))
+  pos -= output.buffer1.len
+  if pos < output.sharedPayload.len:
+    return some((output.sharedPayload.dataAt(pos), output.sharedPayload.len - pos))
+  pos -= output.sharedPayload.len
+  if pos < output.buffer2.len:
+    return some((pointer(addr output.buffer2[pos]), output.buffer2.len - pos))
+
 proc afterSend(
   server: Server,
   clientSocket: SocketHandle,
@@ -2191,21 +2206,10 @@ when defined(ssl):
         let output = dataEntry.outgoingBuffers.peekFirst()
         # Pins the buffer: frames may no longer be joined onto it.
         output.tlsFrozen = true
-        let
-          first = output.bytesSent < output.buffer1.len
-          pos =
-            if first: output.bytesSent
-            else: output.bytesSent - output.buffer1.len
-          buffer =
-            if first: pointer(addr output.buffer1[pos])
-            elif output.sharedPayload.len > 0: output.sharedPayload.dataAt(pos)
-            else: pointer(addr output.buffer2[pos])
-          available =
-            if first: output.buffer1.len - pos
-            elif output.sharedPayload.len > 0: output.sharedPayload.len - pos
-            else: output.buffer2.len - pos
-        if available > 0:
-          let count = dataEntry.tls.writeTls(buffer, min(32 * 1024, available))
+        let segment = output.nextSegment()
+        if segment.isSome:
+          let count = dataEntry.tls.writeTls(
+            segment.get.buffer, min(32 * 1024, segment.get.length))
           if dataEntry.tls.writeWait in {tlsClosed, tlsFailed}: return true
           if count > 0:
             output.bytesSent += count
@@ -2732,34 +2736,15 @@ proc loopForever(server: Server) {.raises: [OSError, IOSelectorsException].} =
         if Write in readyKey.events:
           let
             outgoingBuffer = dataEntry.outgoingBuffers.peekFirst()
-            totalBytes = outgoingBuffer.buffer1.len + outgoingBuffer.buffer2.len +
-              outgoingBuffer.sharedPayload.len
-          if outgoingBuffer.bytesSent == totalBytes:
+            segment = outgoingBuffer.nextSegment()
+          if segment.isNone:
             sentTo.add(readyKey.fd.SocketHandle)
           else:
-            let bytesSent =
-              if outgoingBuffer.bytesSent < outgoingBuffer.buffer1.len:
-                readyKey.fd.SocketHandle.send(
-                  outgoingBuffer.buffer1[outgoingBuffer.bytesSent].addr,
-                  (outgoingBuffer.buffer1.len - outgoingBuffer.bytesSent).cint,
-                  when defined(MSG_NOSIGNAL): MSG_NOSIGNAL else: 0
-                )
-              elif outgoingBuffer.sharedPayload.len > 0:
-                let payloadPos =
-                  outgoingBuffer.bytesSent - outgoingBuffer.buffer1.len
-                readyKey.fd.SocketHandle.send(
-                  outgoingBuffer.sharedPayload.dataAt(payloadPos),
-                  (outgoingBuffer.sharedPayload.len - payloadPos).cint,
-                  when defined(MSG_NOSIGNAL): MSG_NOSIGNAL else: 0
-                )
-              else:
-                let buffer2Pos =
-                  outgoingBuffer.bytesSent - outgoingBuffer.buffer1.len
-                readyKey.fd.SocketHandle.send(
-                  outgoingBuffer.buffer2[buffer2Pos].addr,
-                  (outgoingBuffer.buffer2.len - buffer2Pos).cint,
-                  when defined(MSG_NOSIGNAL): MSG_NOSIGNAL else: 0
-                )
+            let bytesSent = readyKey.fd.SocketHandle.send(
+              segment.get.buffer,
+              segment.get.length.cint,
+              when defined(MSG_NOSIGNAL): MSG_NOSIGNAL else: 0
+            )
             if bytesSent > 0:
               outgoingBuffer.bytesSent += bytesSent
               sentTo.add(readyKey.fd.SocketHandle)
