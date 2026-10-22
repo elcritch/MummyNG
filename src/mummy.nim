@@ -12,7 +12,8 @@ import std/[nativesockets, os, selectors, random]
 import webby/[httpheaders, queryparams, urls]
 import chroniclers, crunchy, zippy
 
-import ./mummy/common, ./mummy/internal, ./mummy/sharedpayload, ./mummy/tls
+import ./mummy/common, ./mummy/internal, ./mummy/tls
+import ./mummy/sharedpayload {.all.}
 
 from std/strutils import find, cmpIgnoreCase, toLowerAscii
 
