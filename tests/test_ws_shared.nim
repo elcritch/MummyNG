@@ -1,6 +1,7 @@
 # nim c -r -d:release --path:src tests/test_ws_shared.nim
 import std/[deques, importutils, nativesockets, strutils, unittest]
 import mummy
+from mummy/sharedpayload {.all.} import dataAt
 
 privateAccess(WebSocket)
 privateAccess(Server)
@@ -22,7 +23,7 @@ suite "shared WebSocket payloads":
     var input = "snapshot".repeat(1024)
     var first = newSharedPayload(input)
     var second = first
-    check first.dataAt(0) == second.dataAt(0)
+    doAssert first.dataAt(0) == second.dataAt(0)
     input[0] = '!'
     check first.matches("snapshot".repeat(1024))
     first = newSharedPayload("replacement")
@@ -32,13 +33,20 @@ suite "shared WebSocket payloads":
     second = move first
     check second.matches("replacement")
 
+  test "private pointer access supports byte offsets":
+    let payload = newSharedPayload("abc")
+    check cast[ptr char](payload.dataAt(0))[] == 'a'
+    check cast[ptr char](payload.dataAt(2))[] == 'c'
+
   test "empty values can be copied, moved and destroyed":
     var payload = newSharedPayload("")
     var copy = payload
+    doAssert payload.dataAt(0) == copy.dataAt(0)
     payload = SharedPayload()
     check copy.len == 0
     copy = move payload
     check copy.len == 0
+    check copy.dataAt(0) == nil
 
   test "independent owners may be copied and released on multiple threads":
     var payload = newSharedPayload("thread-owned bytes")
@@ -64,7 +72,7 @@ suite "shared WebSocket payloads":
       let frame = server.sendQueue.popFirst()
       privateAccess(typeof(frame[]))
       check frame.buffer2.len == 0
-      check frame.sharedPayload.dataAt(0) == address
+      doAssert frame.sharedPayload.dataAt(0) == address
       check frame.sharedPayload.matches(expected)
 
   when not defined(useMalloc):

@@ -29,9 +29,9 @@ proc len*(payload: SharedPayload): int {.inline.} =
   ## Number of payload bytes; a default-initialized owner is empty.
   if payload.storage == nil: 0 else: payload.storage.size
 
-proc dataAt*(payload: SharedPayload; offset: int): pointer {.inline.} =
-  ## Transport-only borrowed pointer. Never mutate it or retain it past the
-  ## owner's lifetime. offset may equal len for an empty payload.
+proc dataAt(payload: SharedPayload; offset: int): pointer {.inline.} =
+  # Transport-only borrowed pointer; the owner must outlive its use.
+  # Allow the end offset for empty payloads without dereferencing it.
   assert offset >= 0 and offset <= payload.len
   if payload.storage != nil:
     cast[pointer](cast[uint](payload.storage) + uint(sizeof(PayloadStorage) + offset))
