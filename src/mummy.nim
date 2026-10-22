@@ -12,7 +12,7 @@ import std/[nativesockets, os, selectors, random]
 import webby/[httpheaders, queryparams, urls]
 import chroniclers, crunchy, zippy
 
-import ./mummy/common, ./mummy/internal, ./mummy/tls
+import ./mummy/common, ./mummy/internal
 import ./mummy/sharedpayload {.all.}
 
 from std/strutils import find, cmpIgnoreCase, toLowerAscii
@@ -35,7 +35,7 @@ elif defined(posix):
 
 import std/locks
 
-export Port, common, httpheaders, queryparams, TlsConfig
+export Port, common, httpheaders, queryparams
 # Keep the transport's private payload helpers out of the public re-exports.
 export sharedpayload.SharedPayload, sharedpayload.newSharedPayload, sharedpayload.len
 

@@ -2,7 +2,16 @@
 # nim c -r -d:release tests/test_ws_transport.nim
 import std/[httpclient, importutils, locks, nativesockets, options]
 import mummy
+import mummy/sharedpayload
 import whisky
+
+static:
+  # Ordinary library imports must not expose the transport's raw pointer.
+  doAssert not compiles(mummy.dataAt(default(SharedPayload), 0))
+  doAssert not compiles(sharedpayload.dataAt(default(SharedPayload), 0))
+  doAssert not compiles(default(SharedPayload).dataAt(0))
+  doAssert not compiles(default(SharedPayload)[0])
+
 when defined(posix):
   from std/posix import SO_SNDBUF
 else:
