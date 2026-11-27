@@ -1,0 +1,20 @@
+nimTitle	tls	mummy/tls.html	module src/mummy/tls		0
+nim	TlsConfig	mummy/tls.html#TlsConfig	type TlsConfig		6
+nim	tlsReady	mummy/tls.html#tlsReady	TlsWait.tlsReady		12
+nim	tlsRead	mummy/tls.html#tlsRead	TlsWait.tlsRead		12
+nim	tlsWrite	mummy/tls.html#tlsWrite	TlsWait.tlsWrite		12
+nim	tlsClosed	mummy/tls.html#tlsClosed	TlsWait.tlsClosed		12
+nim	tlsFailed	mummy/tls.html#tlsFailed	TlsWait.tlsFailed		12
+nim	TlsWait	mummy/tls.html#TlsWait	enum TlsWait		12
+nim	tlsHandshake	mummy/tls.html#tlsHandshake	TlsPhase.tlsHandshake		14
+nim	tlsOpen	mummy/tls.html#tlsOpen	TlsPhase.tlsOpen		14
+nim	tlsClosing	mummy/tls.html#tlsClosing	TlsPhase.tlsClosing		14
+nim	TlsPhase	mummy/tls.html#TlsPhase	enum TlsPhase		14
+nim	TlsContext	mummy/tls.html#TlsContext	type TlsContext		144
+nim	TlsConnection	mummy/tls.html#TlsConnection	object TlsConnection		145
+nim	newTlsContext	mummy/tls.html#newTlsContext,TlsConfig	proc newTlsContext(config: TlsConfig): TlsContext		149
+nim	freeTlsContext	mummy/tls.html#freeTlsContext,TlsContext	proc freeTlsContext(ctx: var TlsContext)		151
+nim	freeTls	mummy/tls.html#freeTls,TlsConnection	proc freeTls(connection: var TlsConnection)		152
+nim	pendingTls	mummy/tls.html#pendingTls,TlsConnection	proc pendingTls(connection: TlsConnection): bool		153
+nim	satisfied	mummy/tls.html#satisfied,TlsWait,set[Event]	proc satisfied(wait: TlsWait; events: set[Event]): bool		155
+nim	tlsInterests	mummy/tls.html#tlsInterests,TlsConnection,bool	proc tlsInterests(connection: TlsConnection; hasOutput: bool; readable = true): set[\n    Event]		162

@@ -28,7 +28,7 @@
     <label for="nav-toggle" id="nav-overlay"></label>
     <div class="container">
       <h1 class="title">Index</h1>
-      Modules: <a href="mummy.html">mummy</a>, <a href="mummy/common.html">mummy/common</a>, <a href="mummy/internal.html">mummy/internal</a>, <a href="mummy/sharedpayload.html">mummy/sharedpayload</a>, <a href="routers.html">routers</a>, <a href="sse.html">sse</a>.<br/><p /><h2>API symbols</h2>
+      Modules: <a href="mummy.html">mummy</a>, <a href="mummy/common.html">mummy/common</a>, <a href="mummy/internal.html">mummy/internal</a>, <a href="mummy/sharedpayload.html">mummy/sharedpayload</a>, <a href="mummy/tls.html">mummy/tls</a>, <a href="routers.html">routers</a>, <a href="sse.html">sse</a>.<br/><p /><h2>API symbols</h2>
 <dl><dt><a name="%60%24%60" href="#%60%24%60"><span>`$`:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
           data-doc-search-tag="mummy: proc `$`(request: Request): string" href="mummy.html#%24%2CRequest">mummy: proc `$`(request: Request): string</a></li>
@@ -121,6 +121,14 @@
 <li><a class="reference external"
           data-doc-search-tag="mummy: WebSocketEvent.ErrorEvent" href="mummy.html#ErrorEvent">mummy: WebSocketEvent.ErrorEvent</a></li>
           </ul></dd>
+<dt><a name="freeTls" href="#freeTls"><span>freeTls:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="tls: proc freeTls(connection: var TlsConnection)" href="mummy/tls.html#freeTls%2CTlsConnection">tls: proc freeTls(connection: var TlsConnection)</a></li>
+          </ul></dd>
+<dt><a name="freeTlsContext" href="#freeTlsContext"><span>freeTlsContext:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="tls: proc freeTlsContext(ctx: var TlsContext)" href="mummy/tls.html#freeTlsContext%2CTlsContext">tls: proc freeTlsContext(ctx: var TlsContext)</a></li>
+          </ul></dd>
 <dt><a name="get" href="#get"><span>get:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
           data-doc-search-tag="routers: proc get(router: var Router; route: string | static string; handler: RequestHandler)" href="routers.html#get%2CRouter%2C%2CRequestHandler">routers: proc get(router: var Router; route: string | static string; handler: RequestHandler)</a></li>
@@ -183,17 +191,21 @@
           maxMessageLen = 64 * 1024; tcpNoDelay = true;
           requestBodyHandler: RequestBodyHandler = nil;
           requestBodyChunkSize: Positive = 64 * 1024;
-          responseBodyHandler: ResponseBodyHandler = nil): Server" href="mummy.html#newServer%2CRequestHandler%2CWebSocketHandler%2CRequestBodyHandler%2CPositive%2CResponseBodyHandler">mummy: proc newServer(handler: RequestHandler; websocketHandler: WebSocketHandler = nil;
+          responseBodyHandler: ResponseBodyHandler = nil; tls: TlsConfig = nil): Server" href="mummy.html#newServer%2CRequestHandler%2CWebSocketHandler%2CRequestBodyHandler%2CPositive%2CResponseBodyHandler%2CTlsConfig">mummy: proc newServer(handler: RequestHandler; websocketHandler: WebSocketHandler = nil;
           workerThreads = max(countProcessors() * 10, 1);
           maxHeadersLen = 8 * 1024; maxBodyLen = 1024 * 1024;
           maxMessageLen = 64 * 1024; tcpNoDelay = true;
           requestBodyHandler: RequestBodyHandler = nil;
           requestBodyChunkSize: Positive = 64 * 1024;
-          responseBodyHandler: ResponseBodyHandler = nil): Server</a></li>
+          responseBodyHandler: ResponseBodyHandler = nil; tls: TlsConfig = nil): Server</a></li>
           </ul></dd>
 <dt><a name="newSharedPayload" href="#newSharedPayload"><span>newSharedPayload:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
           data-doc-search-tag="sharedpayload: proc newSharedPayload(data: string): SharedPayload" href="mummy/sharedpayload.html#newSharedPayload%2Cstring">sharedpayload: proc newSharedPayload(data: string): SharedPayload</a></li>
+          </ul></dd>
+<dt><a name="newTlsContext" href="#newTlsContext"><span>newTlsContext:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="tls: proc newTlsContext(config: TlsConfig): TlsContext" href="mummy/tls.html#newTlsContext%2CTlsConfig">tls: proc newTlsContext(config: TlsConfig): TlsContext</a></li>
           </ul></dd>
 <dt><a name="OpenEvent" href="#OpenEvent"><span>OpenEvent:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
@@ -212,6 +224,10 @@
 <dt><a name="PathParams" href="#PathParams"><span>PathParams:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
           data-doc-search-tag="common: type PathParams" href="mummy/common.html#PathParams">common: type PathParams</a></li>
+          </ul></dd>
+<dt><a name="pendingTls" href="#pendingTls"><span>pendingTls:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="tls: proc pendingTls(connection: TlsConnection): bool" href="mummy/tls.html#pendingTls%2CTlsConnection">tls: proc pendingTls(connection: TlsConnection): bool</a></li>
           </ul></dd>
 <dt><a name="Ping" href="#Ping"><span>Ping:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
@@ -337,6 +353,10 @@
 <li><a class="reference external"
           data-doc-search-tag="routers: object Router" href="routers.html#Router">routers: object Router</a></li>
           </ul></dd>
+<dt><a name="satisfied" href="#satisfied"><span>satisfied:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="tls: proc satisfied(wait: TlsWait; events: set[Event]): bool" href="mummy/tls.html#satisfied%2CTlsWait%2Cset%5BEvent%5D">tls: proc satisfied(wait: TlsWait; events: set[Event]): bool</a></li>
+          </ul></dd>
 <dt><a name="send" href="#send"><span>send:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
           data-doc-search-tag="mummy: proc send(websocket: WebSocket; data: sink string; kind = TextMessage)" href="mummy.html#send%2CWebSocket%2Csinkstring">mummy: proc send(websocket: WebSocket; data: sink string; kind = TextMessage)</a></li>
@@ -381,6 +401,64 @@
 <li><a class="reference external"
           data-doc-search-tag="mummy: MessageKind.TextMessage" href="mummy.html#TextMessage">mummy: MessageKind.TextMessage</a></li>
           </ul></dd>
+<dt><a name="tlsClosed" href="#tlsClosed"><span>tlsClosed:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="tls: TlsWait.tlsClosed" href="mummy/tls.html#tlsClosed">tls: TlsWait.tlsClosed</a></li>
+          </ul></dd>
+<dt><a name="tlsClosing" href="#tlsClosing"><span>tlsClosing:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="tls: TlsPhase.tlsClosing" href="mummy/tls.html#tlsClosing">tls: TlsPhase.tlsClosing</a></li>
+          </ul></dd>
+<dt><a name="TlsConfig" href="#TlsConfig"><span>TlsConfig:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="tls: type TlsConfig" href="mummy/tls.html#TlsConfig">tls: type TlsConfig</a></li>
+          </ul></dd>
+<dt><a name="TlsConnection" href="#TlsConnection"><span>TlsConnection:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="tls: object TlsConnection" href="mummy/tls.html#TlsConnection">tls: object TlsConnection</a></li>
+          </ul></dd>
+<dt><a name="TlsContext" href="#TlsContext"><span>TlsContext:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="tls: type TlsContext" href="mummy/tls.html#TlsContext">tls: type TlsContext</a></li>
+          </ul></dd>
+<dt><a name="tlsFailed" href="#tlsFailed"><span>tlsFailed:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="tls: TlsWait.tlsFailed" href="mummy/tls.html#tlsFailed">tls: TlsWait.tlsFailed</a></li>
+          </ul></dd>
+<dt><a name="tlsHandshake" href="#tlsHandshake"><span>tlsHandshake:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="tls: TlsPhase.tlsHandshake" href="mummy/tls.html#tlsHandshake">tls: TlsPhase.tlsHandshake</a></li>
+          </ul></dd>
+<dt><a name="tlsInterests" href="#tlsInterests"><span>tlsInterests:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="tls: proc tlsInterests(connection: TlsConnection; hasOutput: bool; readable = true): set[
+    Event]" href="mummy/tls.html#tlsInterests%2CTlsConnection%2Cbool">tls: proc tlsInterests(connection: TlsConnection; hasOutput: bool; readable = true): set[
+    Event]</a></li>
+          </ul></dd>
+<dt><a name="tlsOpen" href="#tlsOpen"><span>tlsOpen:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="tls: TlsPhase.tlsOpen" href="mummy/tls.html#tlsOpen">tls: TlsPhase.tlsOpen</a></li>
+          </ul></dd>
+<dt><a name="TlsPhase" href="#TlsPhase"><span>TlsPhase:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="tls: enum TlsPhase" href="mummy/tls.html#TlsPhase">tls: enum TlsPhase</a></li>
+          </ul></dd>
+<dt><a name="tlsRead" href="#tlsRead"><span>tlsRead:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="tls: TlsWait.tlsRead" href="mummy/tls.html#tlsRead">tls: TlsWait.tlsRead</a></li>
+          </ul></dd>
+<dt><a name="tlsReady" href="#tlsReady"><span>tlsReady:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="tls: TlsWait.tlsReady" href="mummy/tls.html#tlsReady">tls: TlsWait.tlsReady</a></li>
+          </ul></dd>
+<dt><a name="TlsWait" href="#TlsWait"><span>TlsWait:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="tls: enum TlsWait" href="mummy/tls.html#TlsWait">tls: enum TlsWait</a></li>
+          </ul></dd>
+<dt><a name="tlsWrite" href="#tlsWrite"><span>tlsWrite:</span></a></dt><dd><ul class="simple">
+<li><a class="reference external"
+          data-doc-search-tag="tls: TlsWait.tlsWrite" href="mummy/tls.html#tlsWrite">tls: TlsWait.tlsWrite</a></li>
+          </ul></dd>
 <dt><a name="toBase" href="#toBase"><span>toBase:</span></a></dt><dd><ul class="simple">
 <li><a class="reference external"
           data-doc-search-tag="common: converter toBase(pathParams: var PathParams): var seq[(string, string)]" href="mummy/common.html#toBase.c%2CPathParams">common: converter toBase(pathParams: var PathParams): var seq[(string, string)]</a></li>
@@ -423,7 +501,7 @@
       <div class="twelve-columns footer">
         <span class="nim-sprite"></span>
         <br>
-        <small style="color: var(--hint);">Made with Nim. Generated: 2026-10-22 12:20:36 UTC</small>
+        <small style="color: var(--hint);">Made with Nim. Generated: 2026-11-27 17:53:47 UTC</small>
       </div>
     </div>
   </div>
