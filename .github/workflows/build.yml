@@ -61,3 +61,11 @@ jobs:
     - run: nim c -r -d:useMalloc tests/test_ws_transport.nim
     - run: nim c --mm:atomicArc -r -d:useMalloc tests/test_ws_transport.nim
     - run: nim c -r -d:useMalloc -d:mummyNoWorkers tests/fuzz_recv.nim
+    - run: nim c -r -d:useMalloc tests/test_batching.nim
+    - run: nim c -r tests/test_tls_state.nim
+    - name: TLS
+      if: runner.os == 'Linux'
+      run: |
+        nim c -r -d:ssl -d:sslVersion=3 tests/test_tls_state.nim
+        nim c -r -d:ssl -d:sslVersion=3 -d:mummyTlsTest tests/test_tls_retry.nim
+        nim c -r -d:ssl -d:sslVersion=3 tests/test_tls.nim
